@@ -1,0 +1,5 @@
+-r requirements.txt
+# Student 2 — LLM broker & agents.
+# Ollama backend uses only the stdlib HTTP client, so nothing else is strictly required.
+# Optional: unified interface for hosted/other local servers (LLM_BACKEND=litellm)
+litellm>=1.40.0 ; python_version >= "3.10"
