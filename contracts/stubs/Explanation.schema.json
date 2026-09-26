@@ -1,0 +1,50 @@
+{
+  "description": "Structured 'Why' component of an agent's assertion.",
+  "properties": {
+    "rationale": {
+      "description": "Detailed reasoning steps or chain of thought.",
+      "title": "Rationale",
+      "type": "string"
+    },
+    "evidence": {
+      "description": "Supporting observations, citations, premises, or clinical findings.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "assumptions": {
+      "description": "Assumptions or constraints under which the explanation holds.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "limitations": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Known uncertainties, edge cases, or counter-considerations.",
+      "title": "Limitations"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "description": "Domain-specific explanation metadata.",
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "rationale"
+  ],
+  "title": "Explanation",
+  "type": "object"
+}

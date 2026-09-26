@@ -1,0 +1,68 @@
+{
+  "description": "Response returned when an agent attempts to acquire a write lock.",
+  "properties": {
+    "acquired": {
+      "description": "True if the lock was successfully acquired.",
+      "title": "Acquired",
+      "type": "boolean"
+    },
+    "lock_token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Cryptographic / UUID lease token required to execute writes.",
+      "title": "Lock Token"
+    },
+    "holder_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ID of the agent currently holding the lock if acquisition failed.",
+      "title": "Holder Id"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Expiration timestamp for the acquired lock lease.",
+      "title": "Expires At"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Error detail if lock acquisition failed or timed out.",
+      "title": "Error Message"
+    }
+  },
+  "required": [
+    "acquired"
+  ],
+  "title": "LockAcquireResponse",
+  "type": "object"
+}

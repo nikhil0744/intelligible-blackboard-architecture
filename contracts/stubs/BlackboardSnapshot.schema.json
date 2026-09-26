@@ -1,0 +1,370 @@
+{
+  "$defs": {
+    "AgentContribution": {
+      "description": "A single atomic contribution posted by an agent to the shared blackboard.",
+      "properties": {
+        "contribution_id": {
+          "description": "Unique identifier for this contribution.",
+          "title": "Contribution Id",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "Blackboard session ID.",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "turn_index": {
+          "description": "Sequential turn index.",
+          "minimum": 0,
+          "title": "Turn Index",
+          "type": "integer"
+        },
+        "agent_id": {
+          "description": "Identifier of the contributing agent.",
+          "title": "Agent Id",
+          "type": "string"
+        },
+        "agent_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Role played by the contributing agent."
+        },
+        "tag": {
+          "$ref": "#/$defs/PXPTag",
+          "description": "PXP operational tag (RATIFY/REVISE/REFUTE/REJECT)."
+        },
+        "target_contribution_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ID of the prior contribution being ratified, revised, refuted, or rejected.",
+          "title": "Target Contribution Id"
+        },
+        "payload": {
+          "$ref": "#/$defs/PEXPayload",
+          "description": "The PEX (Prediction + Explanation) content of this turn."
+        },
+        "is_counterfactual": {
+          "default": false,
+          "description": "Flag indicating if contribution originated in retrospective sandbox simulation.",
+          "title": "Is Counterfactual",
+          "type": "boolean"
+        },
+        "token_usage": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inference tokens consumed formulating this turn.",
+          "title": "Token Usage"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Execution latency in milliseconds.",
+          "title": "Latency Ms"
+        },
+        "timestamp": {
+          "description": "UTC timestamp of the submission.",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "Additional context or instrumentation telemetry.",
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "session_id",
+        "turn_index",
+        "agent_id",
+        "tag",
+        "payload"
+      ],
+      "title": "AgentContribution",
+      "type": "object"
+    },
+    "AgentRole": {
+      "description": "Domain and operational roles for blackboard agents.",
+      "enum": [
+        "PRIMARY",
+        "CRITIC",
+        "DOMAIN_EXPERT",
+        "ARBITER",
+        "COUNTERFACTUAL"
+      ],
+      "title": "AgentRole",
+      "type": "string"
+    },
+    "BlackboardStatus": {
+      "description": "Operational status of a blackboard reasoning session.",
+      "enum": [
+        "INITIALIZING",
+        "ACTIVE",
+        "CONSENSUS",
+        "DEADLOCK",
+        "RESOLVED",
+        "TERMINATED"
+      ],
+      "title": "BlackboardStatus",
+      "type": "string"
+    },
+    "Explanation": {
+      "description": "Structured 'Why' component of an agent's assertion.",
+      "properties": {
+        "rationale": {
+          "description": "Detailed reasoning steps or chain of thought.",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Supporting observations, citations, premises, or clinical findings.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "assumptions": {
+          "description": "Assumptions or constraints under which the explanation holds.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "limitations": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Known uncertainties, edge cases, or counter-considerations.",
+          "title": "Limitations"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "Domain-specific explanation metadata.",
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "rationale"
+      ],
+      "title": "Explanation",
+      "type": "object"
+    },
+    "PEXPayload": {
+      "description": "Coupled Prediction + Explanation (PEX) payload conforming to PXP standards.",
+      "properties": {
+        "prediction": {
+          "$ref": "#/$defs/Prediction",
+          "description": "The prediction ('what')."
+        },
+        "explanation": {
+          "$ref": "#/$defs/Explanation",
+          "description": "The explanation ('why')."
+        }
+      },
+      "required": [
+        "prediction",
+        "explanation"
+      ],
+      "title": "PEXPayload",
+      "type": "object"
+    },
+    "PXPTag": {
+      "description": "PXP (Prediction-eXplanation Protocol) interaction tags (Baskar et al., 2025).\n\nEvery contribution submitted by an agent to the blackboard must be tagged\nwith one of these four operational labels:\n  - RATIFY: The agent agrees with both the prediction and the explanation.\n  - REVISE: The agent offers an alternative prediction and/or explanation,\n            updating the shared understanding or its internal model.\n  - REFUTE: The agent disputes the prediction or explanation with\n            counter-evidence or critique without proposing an adopted revision.\n  - REJECT: The agent fundamentally rejects both the prediction and the\n            explanation, signaling impasse or irreconcilable inconsistency.",
+      "enum": [
+        "RATIFY",
+        "REVISE",
+        "REFUTE",
+        "REJECT"
+      ],
+      "title": "PXPTag",
+      "type": "string"
+    },
+    "Prediction": {
+      "description": "Structured 'What' component of an agent's assertion.",
+      "properties": {
+        "claim": {
+          "description": "The predicted claim, diagnosis, answer, or hypothesis.",
+          "title": "Claim",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "Confidence score in the prediction range [0.0, 1.0].",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "probabilities": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Class or outcome probability distribution, if available.",
+          "title": "Probabilities"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Brief natural language summary of the claim.",
+          "title": "Summary"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "Domain-specific structured prediction fields.",
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "claim",
+        "confidence"
+      ],
+      "title": "Prediction",
+      "type": "object"
+    }
+  },
+  "description": "Complete snapshot of the blackboard state at a given point in time.",
+  "properties": {
+    "session_id": {
+      "description": "Unique session identifier.",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "task_id": {
+      "description": "Benchmark or task identifier.",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_description": {
+      "description": "Task prompt or problem statement.",
+      "title": "Task Description",
+      "type": "string"
+    },
+    "initial_context": {
+      "additionalProperties": true,
+      "description": "Background data, clinical records, or question context.",
+      "title": "Initial Context",
+      "type": "object"
+    },
+    "status": {
+      "$ref": "#/$defs/BlackboardStatus",
+      "default": "INITIALIZING",
+      "description": "Current operational status of the board."
+    },
+    "version": {
+      "default": 0,
+      "description": "Monotonic state version counter for optimistic locking.",
+      "minimum": 0,
+      "title": "Version",
+      "type": "integer"
+    },
+    "active_claim": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Prediction"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The currently leading or ratified consensus prediction."
+    },
+    "contributions": {
+      "description": "Immutable chronological sequence of all posted contributions.",
+      "items": {
+        "$ref": "#/$defs/AgentContribution"
+      },
+      "title": "Contributions",
+      "type": "array"
+    },
+    "active_agents": {
+      "description": "List of agent IDs registered in this reasoning session.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Active Agents",
+      "type": "array"
+    },
+    "created_at": {
+      "description": "Session creation UTC timestamp.",
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "Last state mutation UTC timestamp.",
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "description": "Custom session attributes, benchmark specs, or seeds.",
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "session_id",
+    "task_id",
+    "task_description"
+  ],
+  "title": "BlackboardSnapshot",
+  "type": "object"
+}

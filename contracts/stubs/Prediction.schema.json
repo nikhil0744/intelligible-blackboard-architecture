@@ -1,0 +1,58 @@
+{
+  "description": "Structured 'What' component of an agent's assertion.",
+  "properties": {
+    "claim": {
+      "description": "The predicted claim, diagnosis, answer, or hypothesis.",
+      "title": "Claim",
+      "type": "string"
+    },
+    "confidence": {
+      "description": "Confidence score in the prediction range [0.0, 1.0].",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "probabilities": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Class or outcome probability distribution, if available.",
+      "title": "Probabilities"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Brief natural language summary of the claim.",
+      "title": "Summary"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "description": "Domain-specific structured prediction fields.",
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "claim",
+    "confidence"
+  ],
+  "title": "Prediction",
+  "type": "object"
+}

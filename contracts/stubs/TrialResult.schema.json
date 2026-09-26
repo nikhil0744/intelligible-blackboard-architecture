@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "BenchmarkType": {
+      "description": "Supported multi-agent benchmark datasets.",
+      "enum": [
+        "KramaBench",
+        "MSCoRe",
+        "MedAgentBench"
+      ],
+      "title": "BenchmarkType",
+      "type": "string"
+    },
+    "BlackboardStatus": {
+      "description": "Operational status of a blackboard reasoning session.",
+      "enum": [
+        "INITIALIZING",
+        "ACTIVE",
+        "CONSENSUS",
+        "DEADLOCK",
+        "RESOLVED",
+        "TERMINATED"
+      ],
+      "title": "BlackboardStatus",
+      "type": "string"
+    },
+    "IntelligibilityAssessment": {
+      "description": "Evaluation result assessing Michie-Baskar intelligibility of an interaction.",
+      "properties": {
+        "session_id": {
+          "description": "Assessed blackboard session ID.",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/IntelligibilityLevel",
+          "description": "Assigned intelligibility tier (NONE, ONE_WAY, STRONG, ULTRA_STRONG)."
+        },
+        "is_one_way": {
+          "description": "True if explanations were comprehensible to the evaluator.",
+          "title": "Is One Way",
+          "type": "boolean"
+        },
+        "is_strong": {
+          "description": "True if every turn adhered to the intelligible PXP state machine.",
+          "title": "Is Strong",
+          "type": "boolean"
+        },
+        "is_ultra_strong": {
+          "description": "True if measurable knowledge transfer / model update occurred.",
+          "title": "Is Ultra Strong",
+          "type": "boolean"
+        },
+        "tag_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Histogram of PXP tags exchanged during the session.",
+          "propertyNames": {
+            "$ref": "#/$defs/PXPTag"
+          },
+          "title": "Tag Counts",
+          "type": "object"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Evaluator observations or qualitative remarks.",
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "session_id",
+        "level",
+        "is_one_way",
+        "is_strong",
+        "is_ultra_strong"
+      ],
+      "title": "IntelligibilityAssessment",
+      "type": "object"
+    },
+    "IntelligibilityLevel": {
+      "description": "Michie-Baskar intelligibility criteria tiers.\n\n- NONE: No comprehensible explanation or mutual agreement.\n- ONE_WAY: The human / evaluator understands the agent's explanation.\n- STRONG: Every interaction cycle is one-way intelligible to the participants.\n- ULTRA_STRONG: System is strongly intelligible AND knowledge transfer\n                occurs (improving agent or human performance via feedback).",
+      "enum": [
+        "NONE",
+        "ONE_WAY",
+        "STRONG",
+        "ULTRA_STRONG"
+      ],
+      "title": "IntelligibilityLevel",
+      "type": "string"
+    },
+    "PXPTag": {
+      "description": "PXP (Prediction-eXplanation Protocol) interaction tags (Baskar et al., 2025).\n\nEvery contribution submitted by an agent to the blackboard must be tagged\nwith one of these four operational labels:\n  - RATIFY: The agent agrees with both the prediction and the explanation.\n  - REVISE: The agent offers an alternative prediction and/or explanation,\n            updating the shared understanding or its internal model.\n  - REFUTE: The agent disputes the prediction or explanation with\n            counter-evidence or critique without proposing an adopted revision.\n  - REJECT: The agent fundamentally rejects both the prediction and the\n            explanation, signaling impasse or irreconcilable inconsistency.",
+      "enum": [
+        "RATIFY",
+        "REVISE",
+        "REFUTE",
+        "REJECT"
+      ],
+      "title": "PXPTag",
+      "type": "string"
+    }
+  },
+  "description": "Aggregated metrics collected from an execution trial for paper analytics.",
+  "properties": {
+    "session_id": {
+      "description": "Session identifier.",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "benchmark_name": {
+      "$ref": "#/$defs/BenchmarkType",
+      "description": "Benchmark evaluated."
+    },
+    "task_id": {
+      "description": "Task identifier.",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "counterfactual_density": {
+      "description": "Ablation density tested.",
+      "title": "Counterfactual Density",
+      "type": "number"
+    },
+    "final_status": {
+      "$ref": "#/$defs/BlackboardStatus",
+      "description": "Terminal state of the session."
+    },
+    "consensus_reached": {
+      "description": "True if consensus was reached.",
+      "title": "Consensus Reached",
+      "type": "boolean"
+    },
+    "turns_taken": {
+      "description": "Total turns executed.",
+      "minimum": 0,
+      "title": "Turns Taken",
+      "type": "integer"
+    },
+    "deadlock_count": {
+      "default": 0,
+      "description": "Number of deadlocks triggered.",
+      "minimum": 0,
+      "title": "Deadlock Count",
+      "type": "integer"
+    },
+    "counterfactual_interventions": {
+      "default": 0,
+      "description": "Number of retrospective counterfactual recovery attempts.",
+      "minimum": 0,
+      "title": "Counterfactual Interventions",
+      "type": "integer"
+    },
+    "intelligibility": {
+      "$ref": "#/$defs/IntelligibilityAssessment",
+      "description": "Intelligibility assessment result."
+    },
+    "total_token_cost": {
+      "default": 0,
+      "description": "Total tokens consumed across all agent calls.",
+      "minimum": 0,
+      "title": "Total Token Cost",
+      "type": "integer"
+    },
+    "duration_seconds": {
+      "default": 0.0,
+      "description": "Total wall-clock duration in seconds.",
+      "minimum": 0.0,
+      "title": "Duration Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "session_id",
+    "benchmark_name",
+    "task_id",
+    "counterfactual_density",
+    "final_status",
+    "consensus_reached",
+    "turns_taken",
+    "intelligibility"
+  ],
+  "title": "TrialResult",
+  "type": "object"
+}
