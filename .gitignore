@@ -36,4 +36,12 @@ Thumbs.db
 # Documents
 *.docx
 *.doc
+*.pdf
+.~lock.*#
 
+# Internal tooling
+.agents/
+
+# Build artifacts
+*.egg-info/
+*.egg

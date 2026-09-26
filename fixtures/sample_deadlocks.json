@@ -1,0 +1,67 @@
+{
+  "session_id": "test_session_clinical_001",
+  "task_id": "med_task_fibrosis_vs_chf",
+  "problem_statement": "54-year-old male presents with 6 months of progressive dyspnea on exertion and dry cough. Physical exam reveals finger clubbing and bilateral bibasilar end-inspiratory Velcro crackles. High-resolution chest CT shows subpleural, basal-predominant reticular abnormalities with honeycombing. BNP and echocardiogram are unremarkable.",
+  "ground_truth": "Idiopathic Pulmonary Fibrosis (IPF)",
+  "entries": [
+    {
+      "entry_id": "e1",
+      "parent_id": null,
+      "branch_id": "main",
+      "agent_id": "agent_cardio",
+      "agent_role": "Cardiologist",
+      "tag": "PROPOSE",
+      "prediction": "Congestive Heart Failure (CHF)",
+      "explanation": "Progressive dyspnea on exertion combined with bibasilar pulmonary crackles strongly suggests volume overload secondary to heart failure.",
+      "evidence_refs": ["dyspnea", "crackles"],
+      "confidence": 0.85,
+      "step_number": 1,
+      "metadata": {}
+    },
+    {
+      "entry_id": "e2",
+      "parent_id": "e1",
+      "branch_id": "main",
+      "agent_id": "agent_pulmo",
+      "agent_role": "Pulmonologist",
+      "tag": "REFUTE",
+      "prediction": "Idiopathic Pulmonary Fibrosis (IPF)",
+      "explanation": "Refuting CHF diagnosis. HRCT reveals subpleural honeycombing and patient exhibits finger clubbing, which are pathognomonic for usual interstitial pneumonia (UIP/IPF). Normal BNP and echo rule out cardiogenic pulmonary edema.",
+      "evidence_refs": ["honeycombing", "clubbing", "normal_bnp"],
+      "confidence": 0.95,
+      "step_number": 2,
+      "metadata": {}
+    },
+    {
+      "entry_id": "e3",
+      "parent_id": "e2",
+      "branch_id": "main",
+      "agent_id": "agent_cardio",
+      "agent_role": "Cardiologist",
+      "tag": "REJECT",
+      "prediction": "Congestive Heart Failure (CHF)",
+      "explanation": "Rejecting pulmo refutation. Dry cough and crackles remain predominantly cardiopulmonary symptoms. The reticular pattern could be chronic pulmonary veno-occlusive congestion.",
+      "evidence_refs": ["crackles", "cough"],
+      "confidence": 0.80,
+      "step_number": 3,
+      "metadata": {}
+    },
+    {
+      "entry_id": "e4",
+      "parent_id": "e3",
+      "branch_id": "main",
+      "agent_id": "agent_pulmo",
+      "agent_role": "Pulmonologist",
+      "tag": "REJECT",
+      "prediction": "Idiopathic Pulmonary Fibrosis (IPF)",
+      "explanation": "Rejecting cardio assertion. Subpleural honeycombing is structural fibrotic distortion, not transient fluid. Diuretic therapy will fail and delay antifibrotic therapy.",
+      "evidence_refs": ["honeycombing"],
+      "confidence": 0.98,
+      "step_number": 4,
+      "metadata": {}
+    }
+  ],
+  "active_branches": ["main"],
+  "status": "DEADLOCK",
+  "intelligibility_level": "NONE"
+}

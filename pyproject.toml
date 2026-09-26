@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blackboard-agents"
+version = "0.1.0"
+description = "Intelligible Blackboard Architecture with Counterfactual Agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["contracts*", "blackboard*", "agents*", "llm_broker*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
