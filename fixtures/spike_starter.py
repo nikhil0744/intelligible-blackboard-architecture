@@ -13,8 +13,7 @@ import json
 from pathlib import Path
 from contracts.schemas import BlackboardEntry, PXPTag
 from blackboard.store import InMemoryBlackboard
-from agents.mock_agent import MockPEXAgent
-from llm_broker.mock_broker import MockLLMBroker
+from fixtures.mocks import MockLLMBroker, MockPEXAgent
 
 
 def run_spike():
