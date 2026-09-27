@@ -46,9 +46,8 @@ Thumbs.db
 *.egg-info/
 *.egg
 
-# Local Planning and Reference Documents
+# Local Planning Documents
 PROJECT_OVERVIEW.md
-references/
 *plan*.md
 *Plan*.md
 *PLAN*.md
