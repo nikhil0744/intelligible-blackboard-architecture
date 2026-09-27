@@ -45,3 +45,10 @@ Thumbs.db
 # Build artifacts
 *.egg-info/
 *.egg
+
+# Local Planning and Reference Documents
+PROJECT_OVERVIEW.md
+references/
+*plan*.md
+*Plan*.md
+*PLAN*.md
