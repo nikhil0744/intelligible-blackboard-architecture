@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "BenchmarkType": {
+      "description": "Supported multi-agent benchmark datasets.",
+      "enum": [
+        "KramaBench",
+        "MSCoRe",
+        "MedAgentBench"
+      ],
+      "title": "BenchmarkType",
+      "type": "string"
+    }
+  },
+  "description": "Configuration for an automated benchmark ablation trial.",
+  "properties": {
+    "benchmark_name": {
+      "$ref": "#/$defs/BenchmarkType",
+      "description": "Benchmark dataset."
+    },
+    "task_id": {
+      "description": "Identifier of the task or QA item.",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "counterfactual_density": {
+      "description": "Fraction of counterfactual-capable agents in the ensemble (0.0, 0.33, 0.66, 1.0).",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Counterfactual Density",
+      "type": "number"
+    },
+    "agent_models": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Mapping of agent IDs/roles to model names (e.g. Qwen2.5-7B, Llama-3.1-8B).",
+      "title": "Agent Models",
+      "type": "object"
+    },
+    "max_turns": {
+      "default": 15,
+      "description": "Turn ceiling before terminating trial.",
+      "exclusiveMinimum": 0,
+      "title": "Max Turns",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 42,
+      "description": "Random seed for reproducibility.",
+      "title": "Seed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "benchmark_name",
+    "task_id",
+    "counterfactual_density"
+  ],
+  "title": "TrialConfig",
+  "type": "object"
+}

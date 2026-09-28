@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "TelemetryEventType": {
+      "description": "Event types broadcasted via WebSocket to the visualization UI.",
+      "enum": [
+        "BOARD_INITIALIZED",
+        "STATE_MUTATION",
+        "AGENT_QUEUED",
+        "TURN_DISPATCHED",
+        "AGENT_SUBMISSION",
+        "LOCK_ACQUIRED",
+        "LOCK_RELEASED",
+        "DEADLOCK_DETECTED",
+        "COUNTERFACTUAL_TRIGGERED",
+        "COUNTERFACTUAL_BRANCH_EVALUATED",
+        "COUNTERFACTUAL_RESOLVED",
+        "CONSENSUS_REACHED"
+      ],
+      "title": "TelemetryEventType",
+      "type": "string"
+    }
+  },
+  "description": "Structured telemetry event streamed over WebSockets to the UI frontend.",
+  "properties": {
+    "event_id": {
+      "description": "Unique event ID.",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "$ref": "#/$defs/TelemetryEventType",
+      "description": "Type of event."
+    },
+    "session_id": {
+      "description": "Blackboard session ID.",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "timestamp": {
+      "description": "Event generation UTC timestamp.",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "description": "Event-specific structured data.",
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_type",
+    "session_id"
+  ],
+  "title": "TelemetryEvent",
+  "type": "object"
+}

@@ -1,0 +1,28 @@
+{
+  "description": "Request to acquire an exclusive write lock on a blackboard session.",
+  "properties": {
+    "session_id": {
+      "description": "Target session ID.",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "agent_id": {
+      "description": "Agent requesting the lock.",
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "default": 5.0,
+      "description": "Maximum lock hold duration before automatic TTL expiration.",
+      "exclusiveMinimum": 0.0,
+      "title": "Timeout Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "session_id",
+    "agent_id"
+  ],
+  "title": "LockAcquireRequest",
+  "type": "object"
+}

@@ -36,4 +36,18 @@ Thumbs.db
 # Documents
 *.docx
 *.doc
+*.pdf
+.~lock.*#
 
+# Internal tooling
+.agents/
+
+# Build artifacts
+*.egg-info/
+*.egg
+
+# Local Planning Documents
+PROJECT_OVERVIEW.md
+*plan*.md
+*Plan*.md
+*PLAN*.md
