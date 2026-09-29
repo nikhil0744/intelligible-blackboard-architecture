@@ -11,9 +11,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6.0",
 ]
-
 [tool.setuptools.packages.find]
-include = ["contracts*", "blackboard*", "agents*", "llm_broker*"]
+include = ["contracts*", "blackboard*", "storage*", "counterfactual*", "sandbox*", "scheduler*", "agents*", "llm_broker*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
