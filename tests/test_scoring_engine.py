@@ -202,6 +202,24 @@ def test_branch_objective_function_weighting():
     assert details.outcome_status == "CONVERGED"
 
 
+def test_composite_score_achieves_perfect_unity():
+    scorer = CreditAssignmentScorer()
+    # 100% agreement, 100% confidence, max entropy drop, 0 drift
+    dl_entries = [
+        _make_entry("a1", PXPTag.REFUTE, turn_index=1),
+        _make_entry("a2", PXPTag.REJECT, turn_index=2),
+        _make_entry("a3", PXPTag.REVISE, turn_index=3),
+        _make_entry("a4", PXPTag.REJECT, turn_index=4),
+    ]
+    sim_entries = [
+        _make_entry("a1", PXPTag.RATIFY, confidence=1.0, turn_index=5),
+        _make_entry("a2", PXPTag.RATIFY, confidence=1.0, turn_index=6),
+    ]
+    details = scorer.score_branch(deadlock_entries=dl_entries, simulated_entries=sim_entries)
+    # The convex combination allows composite score to scale up towards 1.0
+    assert details.composite_score > 0.85
+
+
 def test_empty_simulated_branch_handling():
     scorer = CreditAssignmentScorer()
     dl_entries = [_make_entry("a1", PXPTag.REFUTE, turn_index=1)]
@@ -251,6 +269,36 @@ def test_credit_assignment_blame_and_resolution():
     # Ensure all conform to Student 1's Pydantic model
     for d in deltas:
         assert isinstance(d, CreditAssignmentDelta)
+
+
+def test_assign_credit_zero_turn_and_zero_confidence():
+    scorer = CreditAssignmentScorer()
+
+    # Entry at turn 0 with confidence 0.0 (tests falsy bug fix)
+    dl_entries = [
+        _make_entry("agent_zero", PXPTag.REJECT, confidence=0.0, turn_index=0),
+    ]
+
+    deltas = scorer.assign_credit(dl_entries)
+    assert len(deltas) == 1
+    assert deltas[0].turn_index == 0
+    assert "0%" in deltas[0].rationale
+
+
+def test_simulated_branch_with_disagreement_attribution():
+    scorer = CreditAssignmentScorer()
+
+    dl_entries = [_make_entry("a1", PXPTag.REFUTE, turn_index=1)]
+    # Simulated branch where agent disagrees
+    sim_entries = [
+        _make_entry("synthesizer", PXPTag.REVISE, turn_index=2),
+        _make_entry("disagreeing_agent", PXPTag.REFUTE, turn_index=3),
+    ]
+
+    deltas = scorer.assign_credit(dl_entries, sim_entries)
+    refute_delta = next(d for d in deltas if d.agent_id == "disagreeing_agent")
+    # Disagreeing turn in simulated branch receives 0.0 (not rewarded with credit)
+    assert refute_delta.causality_score == 0.0
 
 
 # ============================================================================
@@ -333,3 +381,53 @@ def test_counterfactual_branch_contract_generation():
     assert len(branch.simulated_trajectory) == 2
     assert isinstance(branch.simulated_trajectory[0], AgentContribution)
     assert isinstance(branch.counterfactual_assertion, AgentContribution)
+
+
+def test_build_counterfactual_branch_contract_with_dicts():
+    scorer = CreditAssignmentScorer()
+
+    # Pass raw dictionary entries (simulating JSON/RPC payloads)
+    dict_assertion = {
+        "entry_id": "c_dict_0",
+        "agent_id": "agent_cf",
+        "tag": "REVISE",
+        "prediction": "Dict Claim",
+        "explanation": "Dict Rationale",
+        "step_number": 2,
+    }
+    dict_sim = [
+        {
+            "entry_id": "c_dict_1",
+            "agent_id": "agent_peer",
+            "tag": "RATIFY",
+            "prediction": "Dict Claim Ratified",
+            "explanation": "Dict Ratification Rationale",
+            "step_number": 3,
+        }
+    ]
+
+    details = BranchScoreDetails(
+        agreement_ratio=1.0,
+        tag_entropy_deadlock=1.0,
+        tag_entropy_branch=0.0,
+        delta_tag_entropy=0.50,
+        mean_confidence=0.90,
+        drift_penalty=0.0,
+        composite_score=0.95,
+        outcome_status="CONVERGED",
+    )
+
+    branch = scorer.build_counterfactual_branch_contract(
+        branch_id="test_branch_dict",
+        session_id="session_dict_001",
+        forked_at_turn_index=2,
+        divergence_agent_id="agent_cf",
+        counterfactual_assertion=dict_assertion,
+        simulated_contributions=dict_sim,
+        score_details=details,
+    )
+
+    assert isinstance(branch, CounterfactualBranch)
+    assert len(branch.simulated_trajectory) == 1
+    assert isinstance(branch.simulated_trajectory[0], AgentContribution)
+    assert branch.simulated_trajectory[0].prediction == "Dict Claim Ratified"

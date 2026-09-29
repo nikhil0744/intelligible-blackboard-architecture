@@ -90,12 +90,23 @@ class PlateauDetector:
     """
     Second-order trajectory analyzer tracking score velocity, acceleration,
     and rolling variance to trigger early stopping on asymptotic plateaus.
+
+    Note:
+        Instances maintain mutable internal trajectory state (`history`, `_stagnant_count`).
+        Instantiate a fresh PlateauDetector per independent search branch.
     """
 
-    def __init__(self, patience: int = 2, epsilon: float = 0.05, window_size: int = 3):
+    def __init__(
+        self,
+        patience: int = 2,
+        epsilon: float = 0.05,
+        window_size: int = 3,
+        min_velocity: float = 0.02,
+    ):
         self.patience: int = max(1, patience)
         self.epsilon: float = max(0.0001, epsilon)
         self.window_size: int = max(2, window_size)
+        self.min_velocity: float = min_velocity
         self.history: List[float] = []
         self._stagnant_count: int = 0
 
@@ -126,8 +137,8 @@ class PlateauDetector:
         mean_score = sum(window) / len(window)
         variance = sum((s - mean_score) ** 2 for s in window) / len(window)
 
-        # Plateau criteria: negligible variance and non-positive acceleration or near-zero velocity
-        is_stagnant = variance <= self.epsilon and velocity < 0.02
+        # Plateau criteria: negligible variance and (velocity below threshold or decelerating)
+        is_stagnant = (variance <= self.epsilon) and (velocity < self.min_velocity or acceleration <= 0.0)
         if is_stagnant:
             self._stagnant_count += 1
         else:
@@ -136,11 +147,12 @@ class PlateauDetector:
         if self._stagnant_count >= self.patience:
             explanation = (
                 f"Plateau detected at round {n}: rolling variance ({variance:.6f}) <= {self.epsilon} "
-                f"with velocity {velocity:.4f} across {self._stagnant_count} consecutive rounds."
+                f"with velocity {velocity:.4f} and acceleration {acceleration:.4f} "
+                f"across {self._stagnant_count} consecutive rounds."
             )
             return True, explanation
 
-        return False, f"Search progressing (velocity={velocity:.4f}, variance={variance:.6f})."
+        return False, f"Search progressing (velocity={velocity:.4f}, acceleration={acceleration:.4f}, variance={variance:.6f})."
 
     def reset(self) -> None:
         """Resets the trajectory history and counter."""
@@ -239,22 +251,25 @@ class CreditAssignmentScorer:
         branch_tokens = self._extract_tokens(combined_text)
 
         # 1. Evidence Retention
-        if context_evidence and len(context_evidence) > 0:
+        valid_context_ev = [
+            e.lower().strip()
+            for e in (context_evidence or [])
+            if e and isinstance(e, str) and e.strip()
+        ]
+
+        if valid_context_ev:
             retained = 0
-            for ev in context_evidence:
-                if not ev:
-                    continue
-                ev_clean = ev.lower().strip()
+            for ev_clean in valid_context_ev:
                 ev_spaced = ev_clean.replace("_", " ")
-                # Check citation list or mentions in explanation/prediction text
-                if (
-                    ev_clean in branch_citations
-                    or ev_spaced in branch_citations
-                    or ev_clean in combined_text.lower()
-                    or ev_spaced in combined_text.lower()
+                # Check direct citation or word-boundary regex in combined text
+                if ev_clean in branch_citations or ev_spaced in branch_citations:
+                    retained += 1
+                elif (
+                    re.search(rf"\b{re.escape(ev_clean)}\b", combined_text.lower())
+                    or re.search(rf"\b{re.escape(ev_spaced)}\b", combined_text.lower())
                 ):
                     retained += 1
-            evidence_retention = retained / len(context_evidence)
+            evidence_retention = retained / len(valid_context_ev)
         else:
             evidence_retention = 1.0
 
@@ -284,6 +299,8 @@ class CreditAssignmentScorer:
     ) -> BranchScoreDetails:
         """
         Evaluates a counterfactual branch across all 4 analytical pillars.
+        Weights form a convex combination summing to 1.00:
+        Score = w_agreement * AR + w_entropy * ΔH + w_confidence * MeanConf + w_drift * (1.0 - Drift)
         """
         if not simulated_entries:
             return BranchScoreDetails(
@@ -313,8 +330,9 @@ class CreditAssignmentScorer:
             if "RATIFY" in tag_val:
                 ratify_count += 1
             sim_tags.append(tag_val)
-            conf = getattr(e, "confidence", 0.5)
-            total_conf += float(conf if conf is not None else 0.5)
+            raw_c = getattr(e, "confidence", None)
+            conf = float(raw_c) if raw_c is not None else 0.5
+            total_conf += conf
 
         num_sim = len(simulated_entries)
         agreement_ratio = round(ratify_count / num_sim, 4)
@@ -338,13 +356,14 @@ class CreditAssignmentScorer:
             context_evidence=context_evidence,
             branch_entries=simulated_entries,
         )
+        fidelity = max(0.0, min(1.0, 1.0 - drift_penalty))
 
-        # 4. Composite Objective Function
+        # 4. Composite Objective Function (Convex Combination scaling to 1.00)
         composite = (
             self.w_agreement * agreement_ratio
             + self.w_entropy * delta_entropy
             + self.w_confidence * mean_confidence
-            - self.w_drift * drift_penalty
+            + self.w_drift * fidelity
         )
         composite_score = round(max(0.0, min(1.0, composite)), 4)
 
@@ -394,9 +413,19 @@ class CreditAssignmentScorer:
         for idx, entry in enumerate(deadlock_entries):
             agent_id = getattr(entry, "agent_id", "unknown_agent")
             cid = getattr(entry, "contribution_id", None) or getattr(entry, "entry_id", f"c_dl_{idx}")
-            turn_idx = getattr(entry, "turn_index", None) or getattr(entry, "step_number", idx)
+
+            # Safe turn index extraction (handles turn_index = 0)
+            raw_turn = getattr(entry, "turn_index", None)
+            if raw_turn is None:
+                raw_turn = getattr(entry, "step_number", None)
+            turn_idx = int(raw_turn) if raw_turn is not None else idx
+
             tag_str = str(getattr(entry, "tag", "")).upper()
-            conf = float(getattr(entry, "confidence", 0.5) or 0.5)
+
+            # Safe confidence extraction (handles confidence = 0.0)
+            raw_conf = getattr(entry, "confidence", None)
+            conf = float(raw_conf) if raw_conf is not None else 0.5
+
             ev = getattr(entry, "evidence_refs", None) or getattr(entry, "evidence", []) or []
 
             # Base tag hostility
@@ -439,7 +468,12 @@ class CreditAssignmentScorer:
             for idx, entry in enumerate(simulated_entries):
                 agent_id = getattr(entry, "agent_id", "counterfactual_synthesizer")
                 cid = getattr(entry, "contribution_id", None) or getattr(entry, "entry_id", f"c_sim_{idx}")
-                turn_idx = getattr(entry, "turn_index", None) or getattr(entry, "step_number", idx + len(deadlock_entries))
+
+                raw_turn = getattr(entry, "turn_index", None)
+                if raw_turn is None:
+                    raw_turn = getattr(entry, "step_number", None)
+                turn_idx = int(raw_turn) if raw_turn is not None else (idx + len(deadlock_entries))
+
                 tag_str = str(getattr(entry, "tag", "")).upper()
 
                 if not pivot_found and ("REVISE" in tag_str or "RATIFY" in tag_str):
@@ -450,9 +484,13 @@ class CreditAssignmentScorer:
                         f"deadlock impasse and paved the path to group consensus."
                     )
                     pivot_found = True
-                else:
-                    credit_score = -0.30 if "RATIFY" in tag_str else -0.10
+                elif "RATIFY" in tag_str:
+                    credit_score = -0.30
                     rationale = f"Agent {agent_id} supported convergence with {tag_str} assertion."
+                else:
+                    # Non-converging assertion in simulated branch receives 0.0 (neutral, no credit)
+                    credit_score = 0.0
+                    rationale = f"Agent {agent_id} asserted {tag_str} stance without facilitating consensus."
 
                 deltas.append(
                     CreditAssignmentDelta(
@@ -476,22 +514,25 @@ class CreditAssignmentScorer:
         session_id: str,
         forked_at_turn_index: int,
         divergence_agent_id: str,
-        counterfactual_assertion: AgentContribution | BlackboardEntry,
-        simulated_contributions: List[AgentContribution | BlackboardEntry],
+        counterfactual_assertion: AgentContribution | BlackboardEntry | Dict[str, Any],
+        simulated_contributions: List[AgentContribution | BlackboardEntry | Dict[str, Any]],
         score_details: BranchScoreDetails,
     ) -> CounterfactualBranch:
         """
         Builds a canonical CounterfactualBranch contract instance matching Student 1's schema.
+        Handles AgentContribution, BlackboardEntry, and raw dictionary inputs.
         """
-        # Convert counterfactual_assertion to AgentContribution if needed
+        # Convert counterfactual_assertion to AgentContribution
         if isinstance(counterfactual_assertion, AgentContribution):
             cf_assertion = counterfactual_assertion
         elif hasattr(counterfactual_assertion, "to_agent_contribution"):
             cf_assertion = counterfactual_assertion.to_agent_contribution(session_id=session_id)
+        elif isinstance(counterfactual_assertion, dict):
+            cf_assertion = BlackboardEntry.model_validate(counterfactual_assertion).to_agent_contribution(session_id=session_id)
         else:
             cf_assertion = BlackboardEntry.model_validate(counterfactual_assertion).to_agent_contribution(session_id=session_id)
 
-        # Convert simulated contributions
+        # Convert simulated contributions (supports dict, BlackboardEntry, AgentContribution)
         contribs: List[AgentContribution] = []
         for c in simulated_contributions:
             if isinstance(c, AgentContribution):
@@ -500,6 +541,8 @@ class CreditAssignmentScorer:
                 contribs.append(c.to_agent_contribution(session_id=session_id))
             elif isinstance(c, BlackboardEntry):
                 contribs.append(c.to_agent_contribution(session_id=session_id))
+            elif isinstance(c, dict):
+                contribs.append(BlackboardEntry.model_validate(c).to_agent_contribution(session_id=session_id))
 
         status_map = {
             "CONVERGED": BlackboardStatus.CONSENSUS,
