@@ -40,6 +40,7 @@ from .schemas import (
     BlackboardEntry,
     BlackboardState,
     StreamEvent,
+    BenchmarkTask,
 )
 
 __all__ = [
@@ -71,4 +72,5 @@ __all__ = [
     "BlackboardEntry",
     "BlackboardState",
     "StreamEvent",
+    "BenchmarkTask",
 ]

@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "BenchmarkType": {
+      "description": "Supported multi-agent benchmark datasets.",
+      "enum": [
+        "KramaBench",
+        "MSCoRe",
+        "MedAgentBench"
+      ],
+      "title": "BenchmarkType",
+      "type": "string"
+    }
+  },
+  "description": "Normalized multi-agent benchmark task contract bridging raw dataset ingestion\n(MedAgentBench, KramaBench, MSCoRe) to Blackboard and Scheduler contracts.",
+  "properties": {
+    "task_id": {
+      "description": "Unique identifier for the benchmark task.",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "benchmark_type": {
+      "$ref": "#/$defs/BenchmarkType",
+      "description": "Origin benchmark dataset (KramaBench, MSCoRe, MedAgentBench)."
+    },
+    "problem_statement": {
+      "description": "Problem description, clinical vignette, or research query.",
+      "title": "Problem Statement",
+      "type": "string"
+    },
+    "ground_truth": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Ground truth answer, target diagnosis, or reference finding.",
+      "title": "Ground Truth"
+    },
+    "initial_context": {
+      "additionalProperties": true,
+      "description": "Structured domain context (EHR records, lab values, schemas, documents, data sources).",
+      "title": "Initial Context",
+      "type": "object"
+    },
+    "domain": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Specialty or field (e.g. cardiology, pulmonology, astronomy, wildfire_prevention).",
+      "title": "Domain"
+    },
+    "recommended_roles": {
+      "description": "Suggested agent persona roles for the reasoning ensemble.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Recommended Roles",
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "description": "Dataset-specific attributes, difficulty, raw fields, or tags.",
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "task_id",
+    "benchmark_type",
+    "problem_statement"
+  ],
+  "title": "BenchmarkTask",
+  "type": "object"
+}

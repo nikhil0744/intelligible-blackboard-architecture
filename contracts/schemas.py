@@ -815,7 +815,7 @@ class BlackboardState(BlackboardSnapshot):
         else:
             mapped_status = status
 
-        meta = kwargs.get("metadata", {})
+        meta = dict(kwargs.pop("metadata", {}) or {})
         if ground_truth:
             meta["ground_truth"] = ground_truth
         if active_branches:
@@ -932,5 +932,87 @@ class BlackboardEntry(BaseModel):
             confidence=conf,
             step_number=contrib.turn_index,
             metadata=contrib.metadata,
+        )
+
+
+# ============================================================================
+# Ingested Benchmark Task Contract
+# ============================================================================
+
+class BenchmarkTask(BaseModel):
+    """
+    Normalized multi-agent benchmark task contract bridging raw dataset ingestion
+    (MedAgentBench, KramaBench, MSCoRe) to Blackboard and Scheduler contracts.
+    """
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    task_id: str = Field(..., description="Unique identifier for the benchmark task.")
+    benchmark_type: BenchmarkType = Field(..., description="Origin benchmark dataset (KramaBench, MSCoRe, MedAgentBench).")
+    problem_statement: str = Field(..., description="Problem description, clinical vignette, or research query.")
+    ground_truth: Optional[str] = Field(default=None, description="Ground truth answer, target diagnosis, or reference finding.")
+    initial_context: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured domain context (EHR records, lab values, schemas, documents, data sources)."
+    )
+    domain: Optional[str] = Field(
+        default=None,
+        description="Specialty or field (e.g. cardiology, pulmonology, astronomy, wildfire_prevention)."
+    )
+    recommended_roles: List[str] = Field(
+        default_factory=list,
+        description="Suggested agent persona roles for the reasoning ensemble."
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Dataset-specific attributes, difficulty, raw fields, or tags."
+    )
+
+    @property
+    def task_description(self) -> str:
+        """Alias for compatibility with BlackboardSnapshot."""
+        return self.problem_statement
+
+    def to_blackboard_state(self, session_id: Optional[str] = None) -> BlackboardState:
+        """Instantiate a BlackboardState initialized with this task."""
+        sid = session_id or f"session_{self.benchmark_type.value.lower()}_{self.task_id}_{uuid4().hex[:8]}"
+        meta = dict(self.metadata)
+        meta["benchmark_type"] = self.benchmark_type.value
+        if self.domain:
+            meta["domain"] = self.domain
+        if self.recommended_roles:
+            meta["recommended_roles"] = list(self.recommended_roles)
+
+        return BlackboardState(
+            session_id=sid,
+            task_id=self.task_id,
+            problem_statement=self.problem_statement,
+            ground_truth=self.ground_truth,
+            initial_context=dict(self.initial_context),
+            status=BlackboardStatus.ACTIVE,
+            entries=[],
+            active_branches=["main"],
+            metadata=meta,
+        )
+
+    def to_blackboard_snapshot(self, session_id: Optional[str] = None) -> BlackboardSnapshot:
+        """Instantiate a BlackboardSnapshot initialized with this task."""
+        state = self.to_blackboard_state(session_id=session_id)
+        return BlackboardSnapshot.model_validate(state.model_dump())
+
+    def to_trial_config(
+        self,
+        counterfactual_density: float = 0.0,
+        agent_models: Optional[Dict[str, str]] = None,
+        max_turns: int = 15,
+        seed: int = 42,
+    ) -> TrialConfig:
+        """Generate a TrialConfig for batch evaluation."""
+        return TrialConfig(
+            benchmark_name=self.benchmark_type,
+            task_id=self.task_id,
+            counterfactual_density=counterfactual_density,
+            agent_models=agent_models or {},
+            max_turns=max_turns,
+            seed=seed,
         )
 

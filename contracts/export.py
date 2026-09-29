@@ -21,6 +21,7 @@ from contracts.schemas import (
     TelemetryEvent,
     TrialConfig,
     TrialResult,
+    BenchmarkTask,
 )
 
 EXPORT_MODELS = {
@@ -37,6 +38,7 @@ EXPORT_MODELS = {
     "TelemetryEvent": TelemetryEvent,
     "TrialConfig": TrialConfig,
     "TrialResult": TrialResult,
+    "BenchmarkTask": BenchmarkTask,
 }
 
 
