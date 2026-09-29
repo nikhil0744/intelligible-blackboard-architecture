@@ -404,3 +404,42 @@ class BatchTrialRunner:
                     "duration_seconds": r.duration_seconds,
                 })
         logger.info("Exported %d trial results to CSV at %s", len(results), path)
+
+
+if __name__ == "__main__":
+    import asyncio
+    from analytics.metrics import AblationAnalyzer
+    from analytics.plotting import generate_all_ablation_plots
+
+    print("=" * 65)
+    print(" MSCoRe Benchmark Ingestor & Batch Ablation Runner (Student 4)")
+    print("=" * 65)
+
+    items = MSCoReIngestor.get_sample_dataset()
+    print(f"[*] Ingested {len(items)} benchmark scenarios from sample dataset.")
+
+    runner = BatchTrialRunner(streaming_enabled=False)
+    configs = runner.generate_ablation_matrix(items, densities=[0.0, 0.33, 0.66, 1.0])
+    print(f"[*] Generated {len(configs)} ablation configurations across 0%, 33%, 66%, 100% densities.")
+
+    print("[*] Running batch trials...")
+    results = asyncio.run(runner.run_batch(configs))
+    print(f"[+] Completed {len(results)} trials successfully.")
+
+    out_csv = Path("data/results.csv")
+    out_json = Path("data/results.json")
+    runner.export_results_to_csv(results, out_csv)
+    runner.export_results_to_json(results, out_json)
+
+    analyzer = AblationAnalyzer(results)
+    summary = analyzer.get_density_summary()
+    print("\n--- Ablation Study Results Summary ---")
+    cols = ["counterfactual_density", "consensus_rate_pct", "mean_turns", "mean_token_cost", "deadlock_rate_pct", "ultra_strong_pct"]
+    print(summary[cols].to_string(index=False))
+
+    figs = generate_all_ablation_plots(results, output_dir="analytics/figures")
+    print("\n[+] Generated research figures in analytics/figures/:")
+    for name, fpath in figs.items():
+        print(f"    • {fpath}")
+    print("=" * 65)
+
