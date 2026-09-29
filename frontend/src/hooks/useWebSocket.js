@@ -6,6 +6,8 @@ export function useWebSocket(url, sessionId = null) {
   const [latestSnapshot, setLatestSnapshot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
   const [deadlockState, setDeadlockState] = useState(null);
+  const [counterfactualBranch, setCounterfactualBranch] = useState(null);
+  const [creditAssignment, setCreditAssignment] = useState(null);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
@@ -47,6 +49,7 @@ export function useWebSocket(url, sessionId = null) {
               setLatestSnapshot(parsed.payload.snapshot);
             }
 
+            // Live Deadlock Detection
             if (parsed.event_type === 'DEADLOCK_DETECTED') {
               setDeadlockState({
                 detected: true,
@@ -54,7 +57,36 @@ export function useWebSocket(url, sessionId = null) {
                 turn: parsed.payload?.turn,
                 timestamp: parsed.timestamp,
               });
-            } else if (parsed.event_type === 'COUNTERFACTUAL_RESOLVED' || parsed.event_type === 'CONSENSUS_REACHED') {
+            }
+
+            // Dynamic Counterfactual Branch Creation & Evaluation
+            if (
+              parsed.event_type === 'COUNTERFACTUAL_TRIGGERED' ||
+              parsed.event_type === 'COUNTERFACTUAL_BRANCH_EVALUATED' ||
+              parsed.event_type === 'COUNTERFACTUAL_BRANCH_CREATED'
+            ) {
+              const p = parsed.payload || {};
+              setCounterfactualBranch({
+                branch_id: p.branch_id || `cf_branch_${parsed.event_id?.slice(0, 6)}`,
+                session_id: parsed.session_id,
+                forked_at_turn_index: p.forked_at_turn_index ?? p.turn ?? 1,
+                divergence_agent_id: p.divergence_agent_id || p.agent_id || 'Evaluating Agent',
+                simulated_trajectory: p.simulated_trajectory || p.simulated_entries || [],
+              });
+              if (p.credit_assignment || p.blame_attribution) {
+                const ca = p.credit_assignment || p.blame_attribution;
+                setCreditAssignment({
+                  agent_id: ca.agent_id || p.divergence_agent_id || 'Agent',
+                  turn_index: ca.turn_index ?? p.forked_at_turn_index ?? 1,
+                  causality_score: ca.causality_score ?? 0.85,
+                  rationale: ca.rationale || 'Attribution engine identified divergence causing impasse.',
+                });
+              }
+            } else if (
+              parsed.event_type === 'COUNTERFACTUAL_RESOLVED' ||
+              parsed.event_type === 'DEADLOCK_RESOLVED' ||
+              parsed.event_type === 'CONSENSUS_REACHED'
+            ) {
               setDeadlockState(null);
             }
           }
@@ -105,6 +137,8 @@ export function useWebSocket(url, sessionId = null) {
     latestSnapshot,
     activeSessions,
     deadlockState,
+    counterfactualBranch,
+    creditAssignment,
     send,
     clearEvents,
   };

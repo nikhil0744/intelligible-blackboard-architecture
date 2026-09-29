@@ -120,10 +120,14 @@ export default function App() {
     latestSnapshot: liveSnapshot,
     activeSessions,
     deadlockState,
+    counterfactualBranch: liveCounterfactualBranch,
+    creditAssignment: liveCreditAssignment,
   } = useWebSocket(wsUrl, selectedSessionId || null);
 
   // Fallback to demo snapshot if no live websocket session is active
   const activeSnapshot = liveSnapshot || (useDemoFallback || events.length === 0 ? DEMO_SNAPSHOT : null);
+  const activeCounterfactualBranch = liveCounterfactualBranch || (useDemoFallback || events.length === 0 ? DEMO_COUNTERFACTUAL_BRANCH : null);
+  const activeCreditAssignment = liveCreditAssignment || (useDemoFallback || events.length === 0 ? DEMO_CREDIT_ASSIGNMENT : null);
   const contributions = activeSnapshot?.contributions || [];
   const totalTurns = contributions.length;
 
@@ -207,8 +211,8 @@ export default function App() {
 
             <SplitPanelView
               liveSnapshot={activeSnapshot}
-              counterfactualBranch={DEMO_COUNTERFACTUAL_BRANCH}
-              creditAssignment={DEMO_CREDIT_ASSIGNMENT}
+              counterfactualBranch={activeCounterfactualBranch}
+              creditAssignment={activeCreditAssignment}
             />
           </>
         )}

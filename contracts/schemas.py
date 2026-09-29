@@ -625,6 +625,7 @@ class TelemetryEvent(BaseModel):
     event_id: str = Field(default_factory=_generate_id, description="Unique event ID.")
     event_type: TelemetryEventType = Field(..., description="Type of event.")
     session_id: str = Field(..., description="Blackboard session ID.")
+    agent_id: Optional[str] = Field(default=None, description="Identifier of the emitting agent, if applicable.")
     timestamp: datetime = Field(
         default_factory=_utc_now,
         description="Event generation UTC timestamp."

@@ -34,13 +34,13 @@ async def test_connection_manager_buffering():
             payload={"turn": i + 1},
         )
 
-    history = manager.get_session_history(sid)
+    history = await manager.get_session_history(sid)
     assert len(history) == 3
     assert history[0].payload["turn"] == 1
     assert history[2].payload["turn"] == 3
 
     # Ensure active session summaries report correctly
-    sessions = manager.list_active_sessions()
+    sessions = await manager.list_active_sessions()
     assert len(sessions) == 1
     assert sessions[0]["session_id"] == sid
     assert sessions[0]["event_count"] == 3
@@ -58,7 +58,7 @@ async def test_connection_manager_history_limit():
             payload={"step": i},
         )
 
-    history = manager.get_session_history(sid)
+    history = await manager.get_session_history(sid)
     assert len(history) == 3
     # First two should have been evicted
     assert history[0].payload["step"] == 2
@@ -124,3 +124,54 @@ def test_websocket_telemetry_flow():
         live_frame = websocket.receive_json()
         assert live_frame["event_type"] == "CONSENSUS_REACHED"
         assert live_frame["payload"]["consensus_turns"] == 4
+
+
+def test_rest_graph_endpoint():
+    client = TestClient(app)
+    sid = "graph_test_session"
+
+    # Ingest a snapshot with contributions
+    client.post(
+        "/api/events",
+        json={
+            "event_type": "AGENT_SUBMISSION",
+            "session_id": sid,
+            "agent_id": "Dr. Pulmonologist",
+            "payload": {
+                "contribution": {
+                    "contribution_id": "turn_1",
+                    "agent_id": "Dr. Pulmonologist",
+                    "tag": "REVISE",
+                    "prediction": "Diagnosis: Acute PE",
+                }
+            },
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "event_type": "AGENT_SUBMISSION",
+            "session_id": sid,
+            "agent_id": "Dr. Cardiologist",
+            "payload": {
+                "contribution": {
+                    "contribution_id": "turn_2",
+                    "agent_id": "Dr. Cardiologist",
+                    "tag": "RATIFY",
+                    "target_contribution_id": "turn_1",
+                    "prediction": "Ratify Acute PE",
+                }
+            },
+        },
+    )
+
+    resp = client.get(f"/api/sessions/{sid}/graph")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["session_id"] == sid
+    assert data["total_nodes"] == 2
+    assert data["total_edges"] == 1
+    assert data["nodes"][0]["data"]["agent_id"] == "Dr. Pulmonologist"
+    assert data["edges"][0]["source"] == "turn_1"
+    assert data["edges"][0]["target"] == "turn_2"
+

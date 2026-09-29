@@ -17,3 +17,7 @@ include = ["contracts*", "blackboard*", "storage*", "counterfactual*", "sandbox*
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:.*Using `httpx` with `starlette.testclient` is deprecated.*:DeprecationWarning",
+]
+

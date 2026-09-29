@@ -36,6 +36,19 @@
       "title": "Session Id",
       "type": "string"
     },
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Identifier of the emitting agent, if applicable.",
+      "title": "Agent Id"
+    },
     "timestamp": {
       "description": "Event generation UTC timestamp.",
       "format": "date-time",
