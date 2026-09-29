@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -54,7 +54,7 @@ class PXPTag(str, Enum):
         return None
 
 
-PXPTag.PROPOSE = PXPTag.REVISE
+PXPTag.PROPOSE = PXPTag.REVISE  # type: ignore[attr-defined]
 
 
 class BlackboardStatus(str, Enum):
@@ -88,7 +88,7 @@ class IntelligibilityLevel(str, Enum):
         return None
 
 
-IntelligibilityLevel.WEAK = IntelligibilityLevel.ONE_WAY
+IntelligibilityLevel.WEAK = IntelligibilityLevel.ONE_WAY  # type: ignore[attr-defined]
 
 
 class AgentRole(str, Enum):
