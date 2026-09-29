@@ -114,9 +114,10 @@ class DeadlockAttributionEngine:
         conflict_entries: List[BlackboardEntry] = []
         for e in reversed(entries):
             if e.tag in refute_or_reject:
-                conflict_entries.insert(0, e)
+                conflict_entries.append(e)
             else:
                 break
+        conflict_entries.reverse()
         return conflict_entries
 
     def find_consensus_checkpoints(self, entries: List[BlackboardEntry]) -> List[BlackboardEntry]:

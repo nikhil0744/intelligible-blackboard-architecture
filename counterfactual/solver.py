@@ -120,11 +120,17 @@ class DeadlockSolverDaemon:
             logger.info("DeadlockSolverDaemon attached to scheduler session %s", getattr(scheduler, "session_id", "unknown"))
 
     def detach(self) -> None:
-        """Detaches from the currently attached scheduler."""
+        """Detaches from the currently attached scheduler and cleans up sandbox resources."""
         if self._attached_scheduler and hasattr(self._attached_scheduler, "_deadlock_hooks"):
             if self in self._attached_scheduler._deadlock_hooks:
                 self._attached_scheduler._deadlock_hooks.remove(self)
         self._attached_scheduler = None
+        self.cleanup()
+
+    def cleanup(self) -> None:
+        """Frees all tracked sandbox sessions from memory."""
+        if self.sandbox_manager:
+            self.sandbox_manager.cleanup_all()
 
     # --------------------------------------------------------------------------
     # Callable Hook Interface

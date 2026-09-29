@@ -100,16 +100,24 @@ class PriorityPolicy(BaseArbitrationPolicy):
         if not registered_agents:
             return []
 
+        # Exclude one-shot counterfactual mediator agents from arbitration
+        eligible = {
+            aid: meta for aid, meta in registered_agents.items()
+            if str(meta.get("role", "")).upper() not in ["COUNTERFACTUAL", AgentRole.COUNTERFACTUAL.value]
+        }
+        if not eligible:
+            eligible = registered_agents
+
         # Exclude the agent that just spoke to avoid immediate self-repetition
         last_agent_id = last_contribution.agent_id if last_contribution else None
         candidates = [
             (aid, meta)
-            for aid, meta in registered_agents.items()
-            if aid != last_agent_id or len(registered_agents) == 1
+            for aid, meta in eligible.items()
+            if aid != last_agent_id or len(eligible) == 1
         ]
 
         if not candidates:
-            candidates = list(registered_agents.items())
+            candidates = list(eligible.items())
 
         # Sort by registered priority ascending
         candidates.sort(key=lambda item: item[1].get("priority", 1))
