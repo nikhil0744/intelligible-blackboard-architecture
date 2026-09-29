@@ -62,9 +62,16 @@ class RoundRobinPolicy(BaseArbitrationPolicy):
         if not registered_agents:
             return []
 
-        agent_ids = list(registered_agents.keys())
-        self._last_index = (self._last_index + 1) % len(agent_ids)
-        next_agent_id = agent_ids[self._last_index]
+        # Filter out one-shot counterfactual mediator agents from cyclic rotation
+        eligible_agents = [
+            aid for aid, meta in registered_agents.items()
+            if str(meta.get("role", "")).upper() not in ["COUNTERFACTUAL", AgentRole.COUNTERFACTUAL.value]
+        ]
+        if not eligible_agents:
+            eligible_agents = list(registered_agents.keys())
+
+        self._last_index = (self._last_index + 1) % len(eligible_agents)
+        next_agent_id = eligible_agents[self._last_index]
 
         target_id = last_contribution.contribution_id if last_contribution else None
         return [

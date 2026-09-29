@@ -335,13 +335,30 @@ class CreditAssignmentScorer:
             total_conf += conf
 
         num_sim = len(simulated_entries)
-        agreement_ratio = round(ratify_count / num_sim, 4)
         mean_confidence = round(total_conf / num_sim, 4)
+
+        # Distinguish between branches where all turns are peer ratifications (e.g. [RATIFY, RATIFY])
+        # vs. branches initiating with a synthesized proposal (e.g. [REVISE, RATIFY]).
+        has_proposal = any("REVISE" in str(getattr(e, "tag", "")).upper() for e in simulated_entries)
+        reaction_entries = [e for e in simulated_entries if "REVISE" not in str(getattr(e, "tag", "")).upper()]
+
+        if has_proposal and reaction_entries:
+            # Agreement ratio is determined by the reaction turns to the synthesized proposal
+            ratify_reactions = sum(1 for e in reaction_entries if "RATIFY" in str(getattr(e, "tag", "")).upper())
+            agreement_ratio = round(ratify_reactions / len(reaction_entries), 4)
+            # If all reactions ratify the proposal, the simulated consensus state across agents is unanimous
+            if agreement_ratio == 1.0:
+                entropy_tags = ["RATIFY"] * num_sim
+            else:
+                entropy_tags = sim_tags
+        else:
+            agreement_ratio = round(ratify_count / num_sim, 4)
+            entropy_tags = sim_tags
 
         # 2. Shannon Entropy & Delta
         dl_tags = [str(getattr(e, "tag", "")).upper() for e in deadlock_entries]
         h_deadlock = self.compute_shannon_entropy(dl_tags)
-        h_branch = self.compute_shannon_entropy(sim_tags)
+        h_branch = self.compute_shannon_entropy(entropy_tags)
 
         # Delta entropy normalization
         if h_deadlock == 0.0 and h_branch == 0.0:

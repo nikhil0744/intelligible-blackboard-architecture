@@ -14,6 +14,10 @@ from .simulator import (
     SimulationResult,
     SimulationStatus,
 )
+from .solver import (
+    DeadlockSolverDaemon,
+    SolverConfig,
+)
 
 __all__ = [
     "DeadlockAttributionEngine",
@@ -25,5 +29,8 @@ __all__ = [
     "BranchScoreDetails",
     "PlateauDetector",
     "CreditAssignmentScorer",
+    "DeadlockSolverDaemon",
+    "SolverConfig",
 ]
+
 
