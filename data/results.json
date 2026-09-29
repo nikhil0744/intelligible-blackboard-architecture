@@ -1,0 +1,434 @@
+[
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_01_d0_3d738f",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_01",
+    "counterfactual_density": 0.0,
+    "final_status": "DEADLOCK",
+    "consensus_reached": false,
+    "turns_taken": 5,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_01_d0_3d738f",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 0,
+        "REVISE": 0,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_01 at density 0.0"
+    },
+    "total_token_cost": 2600,
+    "duration_seconds": 0.25
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_01_d33_bf4717",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_01",
+    "counterfactual_density": 0.33,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 6,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_01_d33_bf4717",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 5,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_01 at density 0.33"
+    },
+    "total_token_cost": 3120,
+    "duration_seconds": 0.3
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_01_d66_e491d9",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_01",
+    "counterfactual_density": 0.66,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 8,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_01_d66_e491d9",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 7,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_01 at density 0.66"
+    },
+    "total_token_cost": 4160,
+    "duration_seconds": 0.4
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_01_d100_94807c",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_01",
+    "counterfactual_density": 1.0,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 9,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_01_d100_94807c",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 8,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_01 at density 1.0"
+    },
+    "total_token_cost": 4680,
+    "duration_seconds": 0.45
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_02_d0_7abe99",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_02",
+    "counterfactual_density": 0.0,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 5,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_02_d0_7abe99",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 4,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_02 at density 0.0"
+    },
+    "total_token_cost": 2600,
+    "duration_seconds": 0.25
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_02_d33_7d39df",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_02",
+    "counterfactual_density": 0.33,
+    "final_status": "DEADLOCK",
+    "consensus_reached": false,
+    "turns_taken": 5,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_02_d33_7d39df",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 0,
+        "REVISE": 0,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_02 at density 0.33"
+    },
+    "total_token_cost": 2600,
+    "duration_seconds": 0.25
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_02_d66_2a966e",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_02",
+    "counterfactual_density": 0.66,
+    "final_status": "DEADLOCK",
+    "consensus_reached": false,
+    "turns_taken": 7,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_02_d66_2a966e",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 0,
+        "REVISE": 0,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_02 at density 0.66"
+    },
+    "total_token_cost": 3640,
+    "duration_seconds": 0.35
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_02_d100_7da2bb",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_02",
+    "counterfactual_density": 1.0,
+    "final_status": "RESOLVED",
+    "consensus_reached": true,
+    "turns_taken": 4,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 2,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_02_d100_7da2bb",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 2,
+        "REVISE": 2,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_02 at density 1.0"
+    },
+    "total_token_cost": 3780,
+    "duration_seconds": 0.2
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_03_d0_eb3fa4",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_03",
+    "counterfactual_density": 0.0,
+    "final_status": "DEADLOCK",
+    "consensus_reached": false,
+    "turns_taken": 4,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_03_d0_eb3fa4",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 0,
+        "REVISE": 0,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_03 at density 0.0"
+    },
+    "total_token_cost": 2080,
+    "duration_seconds": 0.2
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_03_d33_186d5f",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_03",
+    "counterfactual_density": 0.33,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 8,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_03_d33_186d5f",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 7,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_03 at density 0.33"
+    },
+    "total_token_cost": 4160,
+    "duration_seconds": 0.4
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_03_d66_26b7d1",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_03",
+    "counterfactual_density": 0.66,
+    "final_status": "RESOLVED",
+    "consensus_reached": true,
+    "turns_taken": 5,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 1,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_03_d66_26b7d1",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 2,
+        "REVISE": 1,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_03 at density 0.66"
+    },
+    "total_token_cost": 3450,
+    "duration_seconds": 0.25
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_03_d100_cf52ee",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_03",
+    "counterfactual_density": 1.0,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 7,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_03_d100_cf52ee",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 6,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_03 at density 1.0"
+    },
+    "total_token_cost": 3640,
+    "duration_seconds": 0.35
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_04_d0_144f33",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_04",
+    "counterfactual_density": 0.0,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 10,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_04_d0_144f33",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 9,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_04 at density 0.0"
+    },
+    "total_token_cost": 5200,
+    "duration_seconds": 0.5
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_04_d33_f66060",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_04",
+    "counterfactual_density": 0.33,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 5,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_04_d33_f66060",
+      "level": "STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": false,
+      "tag_counts": {
+        "RATIFY": 4,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_04 at density 0.33"
+    },
+    "total_token_cost": 2600,
+    "duration_seconds": 0.25
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_04_d66_df3630",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_04",
+    "counterfactual_density": 0.66,
+    "final_status": "CONSENSUS",
+    "consensus_reached": true,
+    "turns_taken": 6,
+    "deadlock_count": 0,
+    "counterfactual_interventions": 0,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_04_d66_df3630",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 5,
+        "REVISE": 1,
+        "REFUTE": 0,
+        "REJECT": 0
+      },
+      "notes": "Simulated ablation trial for mscore_sample_04 at density 0.66"
+    },
+    "total_token_cost": 3120,
+    "duration_seconds": 0.3
+  },
+  {
+    "session_id": "trial_MSCoRe_mscore_sample_04_d100_d79bc1",
+    "benchmark_name": "MSCoRe",
+    "task_id": "mscore_sample_04",
+    "counterfactual_density": 1.0,
+    "final_status": "RESOLVED",
+    "consensus_reached": true,
+    "turns_taken": 10,
+    "deadlock_count": 1,
+    "counterfactual_interventions": 2,
+    "intelligibility": {
+      "session_id": "trial_MSCoRe_mscore_sample_04_d100_d79bc1",
+      "level": "ULTRA_STRONG",
+      "is_one_way": true,
+      "is_strong": true,
+      "is_ultra_strong": true,
+      "tag_counts": {
+        "RATIFY": 2,
+        "REVISE": 2,
+        "REFUTE": 2,
+        "REJECT": 2
+      },
+      "notes": "Simulated ablation trial for mscore_sample_04 at density 1.0"
+    },
+    "total_token_cost": 6900,
+    "duration_seconds": 0.5
+  }
+]
