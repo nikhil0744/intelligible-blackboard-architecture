@@ -432,6 +432,24 @@ class CounterfactualSimulator:
             ),
         )
 
+    def simulate(
+        self,
+        sandbox_session: SandboxSession,
+        attribution: AttributionResult,
+        broker: Optional[Any] = None,
+        target_agent_id: Optional[str] = None,
+        opposing_agent_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> SimulationResult:
+        """Alias for run_adaptive_search accepting optional kwargs for backwards compatibility."""
+        return self.run_adaptive_search(
+            sandbox_session=sandbox_session,
+            attribution=attribution,
+            broker=broker,
+            target_agent_id=target_agent_id,
+            opposing_agent_id=opposing_agent_id,
+        )
+
     def _resolve_agent_role(self, sandbox_session: SandboxSession, agent_id: str, default: str = "generalist") -> str:
         """Finds existing role for agent_id in sandbox history."""
         for entry in sandbox_session.get_all_entries():
