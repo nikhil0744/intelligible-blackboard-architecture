@@ -29,6 +29,8 @@ from contracts.schemas import (
     TelemetryEventType,
     TrialConfig,
     TrialResult,
+    BlackboardState,
+    BlackboardEntry,
 )
 
 
@@ -159,3 +161,85 @@ def test_telemetry_event_streaming():
     )
     assert event.event_type == TelemetryEventType.DEADLOCK_DETECTED
     assert event.payload["turn"] == 4
+
+
+def test_blackboard_state_model_validate_from_dict():
+    """Verify BlackboardState.model_validate normalizes legacy fields from dictionary fixtures."""
+    raw_fixture = {
+        "session_id": "sess-raw-fixture",
+        "task_id": "med-001",
+        "problem_statement": "Patient presents with persistent cough and dyspnea.",
+        "ground_truth": "IPF",
+        "status": "IN_PROGRESS",
+        "active_branches": ["main", "sandbox_1"],
+        "entries": [
+            {
+                "entry_id": "e1",
+                "agent_id": "agent_pulmo",
+                "agent_role": "Pulmonologist",
+                "tag": "RATIFY",
+                "prediction": "IPF",
+                "explanation": "Honeycombing on HRCT",
+                "evidence_refs": ["HRCT-01"],
+                "step_number": 1,
+            }
+        ],
+    }
+    state = BlackboardState.model_validate(raw_fixture)
+    assert state.session_id == "sess-raw-fixture"
+    assert state.problem_statement == "Patient presents with persistent cough and dyspnea."
+    assert state.ground_truth == "IPF"
+    assert state.status == BlackboardStatus.ACTIVE
+    assert "sandbox_1" in state.active_branches
+    assert len(state.contributions) == 1
+    assert state.contributions[0].contribution_id == "e1"
+
+
+def test_agent_contribution_empty_evidence_and_setters():
+    """Verify AgentContribution handles empty evidence without AttributeError and supports setters."""
+    contrib = AgentContribution(
+        contribution_id="c1",
+        session_id="s1",
+        turn_index=1,
+        agent_id="agent_1",
+        tag=PXPTag.RATIFY,
+        payload=PEXPayload(
+            prediction=Prediction(claim="Test Claim", confidence=0.8),
+            explanation=Explanation(rationale="Test Rationale", evidence=[]),
+        ),
+    )
+    # Empty evidence must return empty list without crashing on non-existent prediction.grounding_references
+    assert contrib.evidence_refs == []
+
+    # Test property setters
+    contrib.step_number = 5
+    assert contrib.turn_index == 5
+    assert contrib.step_number == 5
+
+    contrib.branch_id = "sandbox_branch_42"
+    assert contrib.branch_id == "sandbox_branch_42"
+    assert contrib.metadata["branch_id"] == "sandbox_branch_42"
+
+    contrib.parent_id = "c0"
+    assert contrib.parent_id == "c0"
+    assert contrib.target_contribution_id == "c0"
+
+
+def test_persona_role_preservation():
+    """Verify specialized persona roles (e.g. Cardiologist) survive conversion roundtrips."""
+    entry = BlackboardEntry(
+        entry_id="e2",
+        agent_id="agent_cardio",
+        agent_role="Cardiologist",
+        tag=PXPTag.REVISE,
+        prediction="Congestive Heart Failure",
+        explanation="Elevated BNP and bilateral edema",
+        evidence_refs=["BNP-900"],
+    )
+    contrib = entry.to_agent_contribution(session_id="s_med")
+    assert contrib.metadata.get("agent_role_detail") == "Cardiologist"
+
+    reconstructed = BlackboardEntry.from_agent_contribution(contrib)
+    assert reconstructed.agent_role == "Cardiologist"
+    assert reconstructed.prediction == "Congestive Heart Failure"
+

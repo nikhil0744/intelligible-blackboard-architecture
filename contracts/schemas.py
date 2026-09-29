@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _utc_now() -> datetime:
@@ -47,6 +47,15 @@ class PXPTag(str, Enum):
     REFUTE = "REFUTE"
     REJECT = "REJECT"
 
+    @classmethod
+    def _missing_(cls, value: object) -> Any:
+        if isinstance(value, str) and value.upper() == "PROPOSE":
+            return cls.REVISE
+        return None
+
+
+PXPTag.PROPOSE = PXPTag.REVISE  # type: ignore[attr-defined]
+
 
 class BlackboardStatus(str, Enum):
     """Operational status of a blackboard reasoning session."""
@@ -71,6 +80,15 @@ class IntelligibilityLevel(str, Enum):
     ONE_WAY = "ONE_WAY"
     STRONG = "STRONG"
     ULTRA_STRONG = "ULTRA_STRONG"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Any:
+        if isinstance(value, str) and value.upper() == "WEAK":
+            return cls.ONE_WAY
+        return None
+
+
+IntelligibilityLevel.WEAK = IntelligibilityLevel.ONE_WAY  # type: ignore[attr-defined]
 
 
 class AgentRole(str, Enum):
@@ -216,6 +234,52 @@ class AgentContribution(BaseModel):
         description="Additional context or instrumentation telemetry."
     )
 
+    @property
+    def entry_id(self) -> str:
+        return self.contribution_id
+
+    @property
+    def parent_id(self) -> Optional[str]:
+        return self.target_contribution_id
+
+    @parent_id.setter
+    def parent_id(self, value: Optional[str]):
+        self.target_contribution_id = value
+
+    @property
+    def step_number(self) -> int:
+        return self.turn_index
+
+    @step_number.setter
+    def step_number(self, value: int):
+        self.turn_index = value
+
+    @property
+    def prediction(self) -> str:
+        return self.payload.prediction.claim if self.payload and self.payload.prediction else ""
+
+    @property
+    def explanation(self) -> str:
+        return self.payload.explanation.rationale if self.payload and self.payload.explanation else ""
+
+    @property
+    def evidence_refs(self) -> List[str]:
+        if self.payload and self.payload.explanation:
+            return self.payload.explanation.evidence or []
+        return []
+
+    @property
+    def confidence(self) -> float:
+        return self.payload.prediction.confidence if self.payload and self.payload.prediction else 0.0
+
+    @property
+    def branch_id(self) -> str:
+        return self.metadata.get("branch_id", "main")
+
+    @branch_id.setter
+    def branch_id(self, value: str):
+        self.metadata["branch_id"] = value
+
 
 # ============================================================================
 # Blackboard State & History
@@ -265,6 +329,66 @@ class BlackboardSnapshot(BaseModel):
         default_factory=dict,
         description="Custom session attributes, benchmark specs, or seeds."
     )
+
+    @property
+    def entries(self) -> List[AgentContribution]:
+        return self.contributions
+
+    @entries.setter
+    def entries(self, value: List[AgentContribution]):
+        self.contributions = value
+
+    @property
+    def active_branches(self) -> List[str]:
+        if "active_branches" in self.metadata:
+            return self.metadata["active_branches"]
+        b = set()
+        for c in self.contributions:
+            b.add(c.metadata.get("branch_id", "main"))
+        return sorted(list(b)) if b else ["main"]
+
+    @active_branches.setter
+    def active_branches(self, value: List[str]):
+        self.metadata["active_branches"] = value
+
+    @property
+    def problem_statement(self) -> str:
+        return self.task_description
+
+    @problem_statement.setter
+    def problem_statement(self, value: str):
+        self.task_description = value
+
+    @property
+    def ground_truth(self) -> Optional[str]:
+        return self.metadata.get("ground_truth")
+
+    @ground_truth.setter
+    def ground_truth(self, value: Optional[str]):
+        if value is not None:
+            self.metadata["ground_truth"] = value
+        else:
+            self.metadata.pop("ground_truth", None)
+
+    def get_branch_entries(self, branch_id: str = "main") -> List[Any]:
+        return sorted(
+            [
+                c for c in self.contributions
+                if (getattr(c, "metadata", {}).get("branch_id") or getattr(c, "branch_id", "main")) == branch_id
+            ],
+            key=lambda c: getattr(c, "turn_index", getattr(c, "step_number", 0)),
+        )
+
+    def get_entry(self, entry_id: str) -> Optional[Any]:
+        for c in self.contributions:
+            cid = getattr(c, "contribution_id", getattr(c, "entry_id", None))
+            if cid == entry_id:
+                return c
+        return None
+
+    def get_latest_entry(self, branch_id: str = "main") -> Optional[Any]:
+        b_entries = self.get_branch_entries(branch_id)
+        return b_entries[-1] if b_entries else None
 
 
 # ============================================================================
@@ -608,3 +732,205 @@ class TrialResult(BaseModel):
         ge=0.0,
         description="Total wall-clock duration in seconds."
     )
+
+
+class BlackboardState(BlackboardSnapshot):
+    """
+    Unified blackboard state model bridging BlackboardSnapshot with
+    legacy constructor parameters and methods for S2, S3, S4 modules.
+    """
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            d = dict(data)
+            if "task_description" not in d:
+                d["task_description"] = (
+                    d.get("problem_statement")
+                    or d.get("task_prompt")
+                    or f"Task {d.get('task_id', 'unknown')}"
+                )
+            status = d.get("status")
+            if isinstance(status, str):
+                status_map = {
+                    "IN_PROGRESS": BlackboardStatus.ACTIVE,
+                    "ACTIVE": BlackboardStatus.ACTIVE,
+                    "CONSENSUS": BlackboardStatus.CONSENSUS,
+                    "DEADLOCK": BlackboardStatus.DEADLOCK,
+                    "RESOLVED": BlackboardStatus.RESOLVED,
+                    "INITIALIZING": BlackboardStatus.INITIALIZING,
+                    "TERMINATED": BlackboardStatus.TERMINATED,
+                }
+                d["status"] = status_map.get(status.upper(), BlackboardStatus.ACTIVE)
+            meta = dict(d.get("metadata") or {})
+            if "ground_truth" in d and "ground_truth" not in meta:
+                meta["ground_truth"] = d["ground_truth"]
+            if "active_branches" in d and "active_branches" not in meta:
+                meta["active_branches"] = d["active_branches"]
+            d["metadata"] = meta
+            if "contributions" not in d and "entries" in d:
+                session_id = d.get("session_id", "main")
+                contribs = []
+                for e in d["entries"]:
+                    if isinstance(e, AgentContribution):
+                        contribs.append(e)
+                    elif hasattr(e, "to_agent_contribution"):
+                        contribs.append(e.to_agent_contribution(session_id=session_id))
+                    elif isinstance(e, dict):
+                        contribs.append(
+                            BlackboardEntry.model_validate(e).to_agent_contribution(session_id=session_id)
+                        )
+                d["contributions"] = contribs
+            return d
+        return data
+
+    def __init__(
+        self,
+        session_id: str,
+        task_id: str,
+        task_description: Optional[str] = None,
+        problem_statement: Optional[str] = None,
+        ground_truth: Optional[str] = None,
+        status: Union[BlackboardStatus, str] = BlackboardStatus.ACTIVE,
+        entries: Optional[List[Any]] = None,
+        contributions: Optional[List[AgentContribution]] = None,
+        active_branches: Optional[List[str]] = None,
+        intelligibility_level: Optional[Any] = None,
+        **kwargs: Any,
+    ):
+        desc = task_description or problem_statement or f"Task {task_id}"
+        if isinstance(status, str):
+            status_map = {
+                "IN_PROGRESS": BlackboardStatus.ACTIVE,
+                "ACTIVE": BlackboardStatus.ACTIVE,
+                "CONSENSUS": BlackboardStatus.CONSENSUS,
+                "DEADLOCK": BlackboardStatus.DEADLOCK,
+                "RESOLVED": BlackboardStatus.RESOLVED,
+                "INITIALIZING": BlackboardStatus.INITIALIZING,
+                "TERMINATED": BlackboardStatus.TERMINATED,
+            }
+            mapped_status = status_map.get(status.upper(), BlackboardStatus.ACTIVE)
+        else:
+            mapped_status = status
+
+        meta = kwargs.get("metadata", {})
+        if ground_truth:
+            meta["ground_truth"] = ground_truth
+        if active_branches:
+            meta["active_branches"] = active_branches
+
+        contrib_list: List[AgentContribution] = []
+        if contributions:
+            contrib_list = contributions
+        elif entries:
+            for e in entries:
+                if isinstance(e, AgentContribution):
+                    contrib_list.append(e)
+                elif hasattr(e, "to_agent_contribution"):
+                    contrib_list.append(e.to_agent_contribution(session_id=session_id))
+                elif isinstance(e, dict):
+                    contrib_list.append(BlackboardEntry.model_validate(e).to_agent_contribution(session_id=session_id))
+
+        super().__init__(
+            session_id=session_id,
+            task_id=task_id,
+            task_description=desc,
+            status=mapped_status,
+            contributions=contrib_list,
+            metadata=meta,
+            **kwargs,
+        )
+
+
+StreamEvent = TelemetryEvent
+
+
+class BlackboardEntry(BaseModel):
+    """
+    Unified entry model bridging flat Blackboard entry representation
+    with Student 1's nested PEXPayload and AgentContribution specification.
+    """
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    entry_id: str = Field(default_factory=_generate_id, description="Unique contribution identifier")
+    parent_id: Optional[str] = Field(default=None, description="Target contribution ID")
+    branch_id: str = Field(default="main", description="Branch identifier")
+    agent_id: str = Field(..., description="Contributing agent ID")
+    agent_role: str = Field(default="generalist", description="Agent role")
+    tag: PXPTag = Field(..., description="PXP operational tag")
+    prediction: str = Field(..., description="Hypothesis claim")
+    explanation: str = Field(..., description="Reasoning rationale")
+    evidence_refs: List[str] = Field(default_factory=list, description="Evidence citations")
+    confidence: float = Field(default=0.9, ge=0.0, le=1.0, description="Calibrated confidence")
+    step_number: int = Field(default=1, ge=0, description="Turn index")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata dictionary")
+
+    @field_validator("prediction", "explanation")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Field must not be empty or whitespace.")
+        return v.strip()
+
+    def to_agent_contribution(self, session_id: str = "main") -> AgentContribution:
+        """Convert to Student 1's nested AgentContribution schema."""
+        role = None
+        if self.agent_role:
+            try:
+                role = AgentRole(self.agent_role.upper())
+            except ValueError:
+                role = None
+        meta = dict(self.metadata)
+        meta["branch_id"] = self.branch_id
+        meta["agent_role_detail"] = self.agent_role
+        return AgentContribution(
+            contribution_id=self.entry_id,
+            session_id=session_id,
+            turn_index=self.step_number,
+            agent_id=self.agent_id,
+            agent_role=role,
+            tag=self.tag,
+            target_contribution_id=self.parent_id,
+            payload=PEXPayload(
+                prediction=Prediction(
+                    claim=self.prediction,
+                    confidence=self.confidence,
+                ),
+                explanation=Explanation(
+                    rationale=self.explanation,
+                    evidence=self.evidence_refs,
+                ),
+            ),
+            is_counterfactual=self.metadata.get("is_simulated", False),
+            metadata=meta,
+        )
+
+    @classmethod
+    def from_agent_contribution(cls, contrib: AgentContribution) -> "BlackboardEntry":
+        """Construct from Student 1's AgentContribution schema."""
+        role_str = (
+            contrib.metadata.get("agent_role_detail")
+            or (contrib.agent_role.value if contrib.agent_role else "generalist")
+        )
+        pred_claim = contrib.payload.prediction.claim if (contrib.payload and contrib.payload.prediction) else ""
+        expl_rationale = contrib.payload.explanation.rationale if (contrib.payload and contrib.payload.explanation) else ""
+        ev_refs = (contrib.payload.explanation.evidence or []) if (contrib.payload and contrib.payload.explanation) else []
+        conf = contrib.payload.prediction.confidence if (contrib.payload and contrib.payload.prediction) else 0.0
+
+        return cls(
+            entry_id=contrib.contribution_id,
+            parent_id=contrib.target_contribution_id,
+            branch_id=contrib.metadata.get("branch_id", "main"),
+            agent_id=contrib.agent_id,
+            agent_role=role_str,
+            tag=contrib.tag,
+            prediction=pred_claim,
+            explanation=expl_rationale,
+            evidence_refs=ev_refs,
+            confidence=conf,
+            step_number=contrib.turn_index,
+            metadata=contrib.metadata,
+        )
+
