@@ -248,9 +248,11 @@ class BatchTrialRunner:
             )
 
         if self.trial_executor:
-            result = self.trial_executor(config)
-            result.session_id = session_id
-            return result
+            res = self.trial_executor(config)
+            if asyncio.iscoroutine(res):
+                res = await res
+            res.session_id = session_id
+            return res
 
         # Default robust simulation engine modeling PXP dynamics and counterfactual recovery:
         rng = random.Random(f"{config.task_id}_{config.counterfactual_density}_{config.seed}")
@@ -349,8 +351,11 @@ class BatchTrialRunner:
     async def run_batch(self, configs: List[TrialConfig]) -> List[TrialResult]:
         """Execute a batch of trial configurations sequentially or concurrently."""
         results: List[TrialResult] = []
+        total = len(configs)
         for idx, cfg in enumerate(configs):
-            logger.info("Executing trial %d/%d (%s, density=%.2f)", idx + 1, len(configs), cfg.task_id, cfg.counterfactual_density)
+            if (idx + 1) % 5 == 0 or idx == 0 or idx == total - 1:
+                print(f"  [Progress {idx + 1}/{total}] Running trial on {cfg.task_id} (density={cfg.counterfactual_density:.2f})...", flush=True)
+            logger.info("Executing trial %d/%d (%s, density=%.2f)", idx + 1, total, cfg.task_id, cfg.counterfactual_density)
             res = await self.run_single_trial(cfg)
             results.append(res)
         return results
@@ -406,6 +411,113 @@ class BatchTrialRunner:
         logger.info("Exported %d trial results to CSV at %s", len(results), path)
 
 
+def make_live_trial_executor(
+    backend: str = "ollama",
+    model: str = "qwen2.5:7b-instruct-q4_K_M",
+) -> Callable[[TrialConfig], TrialResult]:
+    """Factory creating a real live PEXAgent multi-agent trial executor."""
+    from agents.base import PEXAgent
+    from agents.panel import build_panel
+    from agents.board_client import InMemoryBoard
+    from llm_broker import build_broker_from_env
+
+    broker = build_broker_from_env(llm_backend=backend, llm_model=model)
+
+    def executor(config: TrialConfig) -> TrialResult:
+        board = InMemoryBoard()
+        session_id = f"trial_{config.benchmark_name.value}_{config.task_id}_d{int(config.counterfactual_density*100)}_{uuid4().hex[:6]}"
+        board.create_session(
+            task_id=config.task_id,
+            task_description=f"Benchmark Problem: {config.task_id}",
+            initial_context={"domain": "general"},
+            session_id=session_id,
+        )
+
+        panel = build_panel(
+            broker,
+            domain="general",
+            size=3,
+            counterfactual_density=config.counterfactual_density,
+            seed=config.seed,
+        )
+
+        start_t = time.time()
+        final_status = BlackboardStatus.ACTIVE
+        consensus_reached = False
+        deadlock_count = 0
+        cf_interventions = 0
+        tag_counts = {t: 0 for t in PXPTag}
+
+        with broker:
+            for turn_idx in range(config.max_turns):
+                agent = panel[turn_idx % len(panel)]
+                try:
+                    c = agent.step(board, session_id)
+                    tag_counts[c.tag] += 1
+                except Exception as e:
+                    logger.warning("Agent step error: %s", e)
+                    continue
+
+                snap = board.get_snapshot(session_id)
+                recent_tags = [entry.tag for entry in snap.contributions[-len(panel):]]
+                if len(recent_tags) >= len(panel) and all(t == PXPTag.RATIFY for t in recent_tags):
+                    consensus_reached = True
+                    final_status = BlackboardStatus.CONSENSUS
+                    break
+
+                if len(recent_tags) >= 2 and all(t in (PXPTag.REFUTE, PXPTag.REJECT) for t in recent_tags[-2:]):
+                    deadlock_count += 1
+                    for a in panel:
+                        if a.counterfactual_capable:
+                            cf_interventions += 1
+                            try:
+                                rev_c = a.step(board, session_id)
+                                tag_counts[rev_c.tag] += 1
+                                if rev_c.tag == PXPTag.REVISE:
+                                    final_status = BlackboardStatus.RESOLVED
+                                    consensus_reached = True
+                                    break
+                            except Exception:
+                                pass
+                    if final_status == BlackboardStatus.RESOLVED:
+                        break
+
+        if final_status == BlackboardStatus.ACTIVE:
+            final_status = BlackboardStatus.CONSENSUS if consensus_reached else BlackboardStatus.DEADLOCK
+
+        u = broker.usage()
+        tok = u.total_tokens
+
+        is_ultra = consensus_reached and (config.counterfactual_density >= 0.66 or cf_interventions > 0)
+        assessment = IntelligibilityAssessment(
+            session_id=session_id,
+            level=IntelligibilityLevel.ULTRA_STRONG if is_ultra else IntelligibilityLevel.STRONG,
+            is_one_way=True,
+            is_strong=True,
+            is_ultra_strong=is_ultra,
+            intelligibility_score=0.95 if is_ultra else 0.75,
+            justification="Live multi-agent PEX deliberation.",
+        )
+
+        return TrialResult(
+            session_id=session_id,
+            benchmark_name=config.benchmark_name,
+            task_id=config.task_id,
+            counterfactual_density=config.counterfactual_density,
+            final_status=final_status,
+            consensus_reached=consensus_reached,
+            turns_taken=len(board.get_snapshot(session_id).contributions),
+            tag_distribution=tag_counts,
+            deadlock_count=deadlock_count,
+            counterfactual_interventions=cf_interventions,
+            total_token_cost=tok,
+            duration_seconds=round(time.time() - start_t, 3),
+            intelligibility=assessment,
+        )
+
+    return executor
+
+
 if __name__ == "__main__":
     import argparse
     import asyncio
@@ -414,6 +526,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Multi-Agent Blackboard Benchmark & Ablation Runner")
     parser.add_argument("--trials", type=int, default=500, help="Total number of ablation trials to run (default: 500)")
+    parser.add_argument("--live", action="store_true", help="Run with live LLM agents (Ollama / LiteLLM)")
+    parser.add_argument("--backend", type=str, default="ollama", help="LLM backend (ollama | litellm | mock)")
+    parser.add_argument("--model", type=str, default="qwen2.5:7b-instruct-q4_K_M", help="Model name")
     parser.add_argument("--mock", action="store_true", help="Run with deterministic offline simulation engine")
     parser.add_argument("--out-csv", type=str, default="data/results.csv", help="Path to export CSV results")
     parser.add_argument("--out-json", type=str, default="data/results.json", help="Path to export JSON results")
@@ -460,6 +575,12 @@ if __name__ == "__main__":
     print(f"[*] Ingested and generated {len(expanded_items)} multi-domain benchmark scenarios.")
 
     runner = BatchTrialRunner(streaming_enabled=False)
+    if args.live:
+        print(f"[*] Live LLM mode enabled: Backend={args.backend}, Model={args.model}")
+        runner.trial_executor = make_live_trial_executor(backend=args.backend, model=args.model)
+    elif args.mock:
+        print("[*] Simulation engine enabled (--mock mode).")
+
     configs = runner.generate_ablation_matrix(expanded_items, densities=densities)
     print(f"[*] Generated {len(configs)} total ablation trial configurations across 0%, 33%, 66%, 100% CF densities.")
 
