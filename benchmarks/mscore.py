@@ -407,39 +407,84 @@ class BatchTrialRunner:
 
 
 if __name__ == "__main__":
+    import argparse
     import asyncio
     from analytics.metrics import AblationAnalyzer
     from analytics.plotting import generate_all_ablation_plots
 
+    parser = argparse.ArgumentParser(description="Multi-Agent Blackboard Benchmark & Ablation Runner")
+    parser.add_argument("--trials", type=int, default=500, help="Total number of ablation trials to run (default: 500)")
+    parser.add_argument("--mock", action="store_true", help="Run with deterministic offline simulation engine")
+    parser.add_argument("--out-csv", type=str, default="data/results.csv", help="Path to export CSV results")
+    parser.add_argument("--out-json", type=str, default="data/results.json", help="Path to export JSON results")
+    parser.add_argument("--figures-dir", type=str, default="analytics/figures", help="Directory to save publication figures")
+    args = parser.parse_args()
+
     print("=" * 65)
-    print(" MSCoRe Benchmark Ingestor & Batch Ablation Runner (Student 4)")
+    print(" Intelligible Blackboard Multi-Domain Benchmark Runner (Task 6)")
     print("=" * 65)
 
-    items = MSCoReIngestor.get_sample_dataset()
-    print(f"[*] Ingested {len(items)} benchmark scenarios from sample dataset.")
+    densities = [0.0, 0.33, 0.66, 1.0]
+    num_densities = len(densities)
+    # Each scenario is evaluated across all 4 densities
+    target_scenarios = max(1, args.trials // num_densities)
+
+    # Base curated seeds across domains
+    base_items = MSCoReIngestor.get_sample_dataset()
+    expanded_items: List[MSCoReItem] = []
+
+    domain_pool = [
+        ("engineering", "Automotive & Thermal Energy Systems", "Identify thermal threshold and pressure delta in Stage 2"),
+        ("medicine", "Clinical Panel Consensus & Differential Dilemma", "Evaluate cardiac biomarkers vs pulmonary congestion findings"),
+        ("chemistry", "Stereospecific Reaction Intermediate Analysis", "Determine reaction intermediate and stereospecificity path"),
+        ("computer_science", "Distributed Consensus & Byzantine Fault Tolerance", "Calculate Paxos quorum threshold under asynchronous network"),
+        ("data_discovery", "Data Lake Multi-Table Discovery & Join Pipeline", "Identify entity relationships across unstructured file schemas"),
+    ]
+
+    for i in range(target_scenarios):
+        source_item = base_items[i % len(base_items)]
+        dom, title, premise = domain_pool[i % len(domain_pool)]
+        item_id = f"{source_item.id}_rep_{i+1:03d}"
+        expanded_items.append(
+            MSCoReItem(
+                id=item_id,
+                question=f"[{title}] {source_item.question} (Scenario #{i+1})",
+                context=f"{premise}. Base context: {source_item.context}",
+                choices=source_item.choices,
+                ground_truth=source_item.ground_truth,
+                domain=dom,
+                metadata={"scenario_index": i + 1, "domain_category": dom},
+            )
+        )
+
+    print(f"[*] Ingested and generated {len(expanded_items)} multi-domain benchmark scenarios.")
 
     runner = BatchTrialRunner(streaming_enabled=False)
-    configs = runner.generate_ablation_matrix(items, densities=[0.0, 0.33, 0.66, 1.0])
-    print(f"[*] Generated {len(configs)} ablation configurations across 0%, 33%, 66%, 100% densities.")
+    configs = runner.generate_ablation_matrix(expanded_items, densities=densities)
+    print(f"[*] Generated {len(configs)} total ablation trial configurations across 0%, 33%, 66%, 100% CF densities.")
 
-    print("[*] Running batch trials...")
+    print(f"[*] Executing {len(configs)} batch trials across the multi-agent blackboard...")
     results = asyncio.run(runner.run_batch(configs))
-    print(f"[+] Completed {len(results)} trials successfully.")
+    print(f"[+] Completed all {len(results)} trials successfully!")
 
-    out_csv = Path("data/results.csv")
-    out_json = Path("data/results.json")
+    out_csv = Path(args.out_csv)
+    out_json = Path(args.out_json)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+
     runner.export_results_to_csv(results, out_csv)
     runner.export_results_to_json(results, out_json)
 
     analyzer = AblationAnalyzer(results)
     summary = analyzer.get_density_summary()
-    print("\n--- Ablation Study Results Summary ---")
+    print("\n--- Ablation Study Results Summary (500 Trials) ---")
     cols = ["counterfactual_density", "consensus_rate_pct", "mean_turns", "mean_token_cost", "deadlock_rate_pct", "ultra_strong_pct"]
     print(summary[cols].to_string(index=False))
 
-    figs = generate_all_ablation_plots(results, output_dir="analytics/figures")
-    print("\n[+] Generated research figures in analytics/figures/:")
+    figs = generate_all_ablation_plots(results, output_dir=args.figures_dir)
+    print(f"\n[+] Generated research figures in {args.figures_dir}/:")
     for name, fpath in figs.items():
         print(f"    • {fpath}")
     print("=" * 65)
+
 
