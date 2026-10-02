@@ -23,18 +23,29 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
+          cache-dependency-path: pyproject.toml
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-s1.txt ]; then pip install -r requirements-s1.txt; fi
-          if [ -f requirements-s2.txt ]; then pip install -r requirements-s2.txt; fi
-          if [ -f requirements-s4.txt ]; then pip install -r requirements-s4.txt; fi
+          pip install -e ".[dev,litellm]"
 
       - name: Verify Contract Schema Export
         run: |
-          python -m contracts.export
+          python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import json
+          from contracts.export import export_schemas
+
+          tracked = Path("src/contracts/stubs")
+          with TemporaryDirectory() as directory:
+              generated = Path(directory)
+              export_schemas(generated)
+              assert {p.name for p in generated.glob("*.json")} == {p.name for p in tracked.glob("*.json")}
+              for path in generated.glob("*.json"):
+                  assert json.loads(path.read_text()) == json.loads((tracked / path.name).read_text()), path.name
+          PY
 
       - name: Run Pytest Suite
         run: |

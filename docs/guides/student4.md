@@ -1,3 +1,5 @@
+> Historical contributor guide. Run setup commands from the repository root; see the [current README](../../README.md) for the source layout and setup.
+
 # Student 4: Real-Time Visualization UI & Benchmarking
 
 This module contains the deliverables for **Student 4** in the Intelligible Blackboard Architecture team project.
@@ -6,9 +8,9 @@ This module contains the deliverables for **Student 4** in the Intelligible Blac
 
 ## 1. Architecture & Deliverables
 
-### A. FastAPI WebSocket Streaming Service (`streaming/`)
-- **Connection Manager (`streaming/manager.py`)**: Thread-safe WebSocket connection pool supporting global and session-specific channels, in-memory event buffering, and automatic reconnection synchronization.
-- **FastAPI Server (`streaming/main.py`)**:
+### A. FastAPI WebSocket Streaming Service (`src/streaming/`)
+- **Connection Manager (`src/streaming/manager.py`)**: Thread-safe WebSocket connection pool supporting global and session-specific channels, in-memory event buffering, and automatic reconnection synchronization.
+- **FastAPI Server (`src/streaming/main.py`)**:
   - `GET /health`: Health and connection telemetry.
   - `GET /api/sessions`: List active reasoning sessions and event statistics.
   - `GET /api/sessions/{session_id}/events`: Session event back-history.
@@ -27,11 +29,11 @@ This module contains the deliverables for **Student 4** in the Intelligible Blac
 - **Playback Controls (`PlaybackControls.jsx`)**: Turn scrubber, play/pause, step forward/back, and 0.5x–5x playback speed.
 - **Ablation Dashboard (`AblationDashboard.jsx`)**: Multi-density KPI cards and comparative table across 0%, 33%, 66%, and 100% counterfactual densities.
 
-### C. MSCoRe Ingestion & Shared Batch Trial Runner (`benchmarks/mscore.py`)
+### C. MSCoRe Ingestion & Shared Batch Trial Runner (`src/benchmarks/mscore.py`)
 - **`MSCoReIngestor`**: Parses JSON/JSONL benchmark files and provides built-in clinical/technical test scenarios.
 - **`BatchTrialRunner`**: Shared trial execution engine used across all three datasets (MSCoRe, KramaBench, MedAgentBench), modeling counterfactual resolution dynamics and outputting `TrialResult` records.
 
-### D. Analytics & Publication Graphics (`analytics/`)
+### D. Analytics & Publication Graphics (`src/analytics/`)
 - **`AblationAnalyzer`**: Statistical KPI aggregator (consensus rate, turns, token cost, deadlock recovery rate, Ultra-Strong intelligibility rate).
 - **`plotting.py`**: Automated Matplotlib script generating research figures:
   - `fig1_consensus_vs_density.png`
@@ -44,7 +46,7 @@ This module contains the deliverables for **Student 4** in the Intelligible Blac
 
 ### Step 1: Install Python Dependencies
 ```bash
-pip install -r requirements-s4.txt
+pip install -e ".[dev]"
 ```
 
 ### Step 2: Run Tests

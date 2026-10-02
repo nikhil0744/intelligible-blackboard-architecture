@@ -530,9 +530,9 @@ if __name__ == "__main__":
     parser.add_argument("--backend", type=str, default="ollama", help="LLM backend (ollama | litellm | mock)")
     parser.add_argument("--model", type=str, default="qwen2.5:7b-instruct-q4_K_M", help="Model name")
     parser.add_argument("--mock", action="store_true", help="Run with deterministic offline simulation engine")
-    parser.add_argument("--out-csv", type=str, default="data/results.csv", help="Path to export CSV results")
-    parser.add_argument("--out-json", type=str, default="data/results.json", help="Path to export JSON results")
-    parser.add_argument("--figures-dir", type=str, default="analytics/figures", help="Directory to save publication figures")
+    parser.add_argument("--out-csv", type=str, default="outputs/results.csv", help="Path to export CSV results")
+    parser.add_argument("--out-json", type=str, default="outputs/results.json", help="Path to export JSON results")
+    parser.add_argument("--figures-dir", type=str, default="outputs/figures", help="Directory to save publication figures")
     args = parser.parse_args()
 
     print("=" * 65)

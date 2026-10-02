@@ -1,3 +1,5 @@
+> Historical contributor guide. Run setup commands from the repository root; see the [current README](../../README.md) for the source layout and setup.
+
 # Student 2 — Agent Engineering & Model Inference Pipeline
 
 Branch: `student-2-agents` (built on `student-1-core` contracts).
@@ -5,17 +7,17 @@ Branch: `student-2-agents` (built on `student-1-core` contracts).
 ## What's here
 | Path | Deliverable (plan §3) |
 |---|---|
-| `llm_broker/` | Multi-threaded local model calling interface + hardware-resource broker |
-| `llm_broker/backends/` | `OllamaBackend` (stdlib HTTP, schema-constrained JSON), `LiteLLMBackend` (vLLM/hosted), `MockBackend` (offline) |
-| `prompts/` | Prompt matrix: `personas.json` (general / medical / engineering / data), PXP rules, PEX JSON schema, robust parser |
-| `agents/` | `PEXAgent` lifecycle, `build_panel` (ablation density), `act_parallel`, `BoardClient` interface + `InMemoryBoard` stub |
+| `src/llm_broker/` | Multi-threaded local model calling interface + hardware-resource broker |
+| `src/llm_broker/backends/` | `OllamaBackend` (stdlib HTTP, schema-constrained JSON), `LiteLLMBackend` (vLLM/hosted), `MockBackend` (offline) |
+| `src/prompts/` | Prompt matrix: `personas.json` (general / medical / engineering / data), PXP rules, PEX JSON schema, robust parser |
+| `src/agents/` | `PEXAgent` lifecycle, `build_panel` (ablation density), `act_parallel`, `BoardClient` interface + `InMemoryBoard` stub |
 | `tests/test_s2_agents.py` | 20 offline tests (no GPU needed) |
-| `scripts/s2_smoke.py` | Live check against a real local model |
+| `src/scripts/s2_smoke.py` | Live check against a real local model |
 
 ## Setup (plan §7, Student 2)
 ```bash
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements-s2.txt                    # litellm optional
+pip install -e ".[dev,litellm]"                    # litellm optional
 cp .env.example .env
 ollama pull qwen2.5:7b-instruct-q4_K_M
 pytest -q                                             # offline
@@ -46,6 +48,6 @@ python -m scripts.s2_smoke --domain medical --turns 4 --parallel   # live
 - [x] PEX JSON schema + tolerant parser + repair loop
 - [x] PEXAgent read → formulate → tag → submit
 - [x] Offline test suite passing
-- [ ] Run `scripts/s2_smoke.py` on your machine with the real 7B model; record JSON-validity rate
+- [ ] Run `src/scripts/s2_smoke.py` on your machine with the real 7B model; record JSON-validity rate
 - [ ] Swap `InMemoryBoard` for S1's store once `storage/` / `scheduler/` land
 - [ ] Hand S3 the broker + `act(..., is_counterfactual=True)` API

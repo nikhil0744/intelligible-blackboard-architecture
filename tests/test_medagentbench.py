@@ -8,6 +8,7 @@ Blackboard contract formatting, and Section 2.5 ablation resampling.
 from __future__ import annotations
 
 import json
+from importlib.resources import files
 from pathlib import Path
 import pytest
 
@@ -107,12 +108,8 @@ def test_parse_string_context(adapter: MedAgentBenchAdapter):
 
 def test_parse_clinical_fixture_sample_deadlocks(adapter: MedAgentBenchAdapter):
     """Verify adapter can ingest fixtures/sample_deadlocks.json without schema friction."""
-    fixture_path = (
-        Path(__file__).resolve().parent.parent
-        / "fixtures"
-        / "sample_deadlocks.json"
-    )
-    with open(fixture_path, "r", encoding="utf-8") as f:
+    fixture_path = files("fixtures").joinpath("sample_deadlocks.json")
+    with fixture_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     task = adapter.load_from_dict(data)
