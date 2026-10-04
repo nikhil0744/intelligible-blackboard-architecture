@@ -4,24 +4,26 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from contracts.schemas import (
     AgentContribution,
     AgentRole,
     BlackboardSnapshot,
-    PXPTag,
 )
 from llm_broker import ChatMessage, LLMError, LLMRequest, ModelBroker
 from prompts import (
     AgentDecision,
     DecisionParseError,
+    DecisionSemanticError,
     Persona,
     build_messages,
     decision_json_schema,
     get_persona,
     parse_decision,
     repair_message,
+    validate_decision,
 )
 
 from .board_client import BoardClient
@@ -29,8 +31,60 @@ from .board_client import BoardClient
 log = logging.getLogger(__name__)
 
 
+@dataclass
+class Formulation:
+    """Outcome of one agent turn's model calls, including every repair attempt."""
+
+    decision: AgentDecision
+    tokens: int
+    latency_ms: float
+    attempts: int
+    raw_responses: List[str] = field(default_factory=list)
+    # why each earlier attempt was rejected, e.g. "invalid_json: ..." or "ratify_claim_mismatch: ..."
+    repair_reasons: List[str] = field(default_factory=list)
+    # meaning-preserving fixes applied to the accepted output (see prompts.validation)
+    normalizations: List[str] = field(default_factory=list)
+
+
 class AgentTurnError(RuntimeError):
-    pass
+    """A turn that produced no valid contribution. It is a recorded failure, never a default answer.
+
+    `kind` is "model_failure" (the model call itself failed) or "invalid_output"
+    (the model answered, but never with a valid, board-consistent decision).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        agent_id: str = "",
+        kind: str = "invalid_output",
+        attempts: int = 0,
+        tokens: int = 0,
+        latency_ms: float = 0.0,
+        raw_responses: Optional[List[str]] = None,
+        repair_reasons: Optional[List[str]] = None,
+    ):
+        super().__init__(message)
+        self.agent_id = agent_id
+        self.kind = kind
+        self.attempts = attempts
+        self.tokens = tokens
+        self.latency_ms = latency_ms
+        self.raw_responses = list(raw_responses or [])
+        self.repair_reasons = list(repair_reasons or [])
+
+    def to_record(self) -> dict:
+        return {
+            "agent_id": self.agent_id,
+            "kind": self.kind,
+            "error": str(self),
+            "attempts": self.attempts,
+            "tokens": self.tokens,
+            "latency_ms": self.latency_ms,
+            "raw_responses": self.raw_responses,
+            "repair_reasons": self.repair_reasons,
+        }
 
 
 class PEXAgent:
@@ -77,12 +131,20 @@ class PEXAgent:
         extra = "\n".join(x for x in (self.system_addendum, extra_instructions) if x) or None
         return build_messages(self.persona, snapshot, self.agent_id, extra, self.max_history)
 
-    # ---- 2. formulate ----------------------------------------------------------
-    def formulate(self, snapshot: BlackboardSnapshot, extra_instructions: Optional[str] = None):
-        """Returns (decision, tokens_used, latency_ms, attempts). Re-prompts on invalid JSON."""
+    # ---- 2. formulate + validate ----------------------------------------------
+    def formulate(self, snapshot: BlackboardSnapshot, extra_instructions: Optional[str] = None) -> Formulation:
+        """Call the model until its output is valid JSON AND consistent with the board.
+
+        Each rejected attempt is re-prompted with the actual error (shape or semantic).
+        After `max_parse_retries` repairs the turn fails with AgentTurnError; nothing is
+        ever patched into agreement. Raw responses and reasons are kept either way.
+        """
         messages = self.read(snapshot, extra_instructions)
-        tokens, latency, last_err = 0, 0.0, ""
-        for attempt in range(1, self.max_parse_retries + 2):
+        tokens, latency = 0, 0.0
+        raw: List[str] = []
+        reasons: List[str] = []
+        max_attempts = self.max_parse_retries + 1
+        for attempt in range(1, max_attempts + 1):
             req = LLMRequest(
                 messages=messages,
                 model=self.model,
@@ -95,48 +157,45 @@ class PEXAgent:
             try:
                 resp = self.broker.generate(req)
             except LLMError as e:
-                raise AgentTurnError(f"{self.agent_id}: model call failed: {e}") from e
+                raise AgentTurnError(
+                    f"{self.agent_id}: model call failed: {e}",
+                    agent_id=self.agent_id,
+                    kind="model_failure",
+                    attempts=attempt,
+                    tokens=tokens,
+                    latency_ms=latency,
+                    raw_responses=raw,
+                    repair_reasons=reasons,
+                ) from e
             tokens += resp.total_tokens
             latency += resp.latency_ms
+            raw.append(resp.text)
             try:
-                return parse_decision(resp.text), tokens, latency, attempt
+                decision, normalizations = validate_decision(parse_decision(resp.text), snapshot)
+                return Formulation(decision, tokens, latency, attempt, raw, reasons, normalizations)
             except DecisionParseError as e:
-                last_err = str(e)
-                log.warning("%s: invalid PEX JSON (attempt %d): %s", self.agent_id, attempt, last_err[:200])
+                code = e.code if isinstance(e, DecisionSemanticError) else "invalid_json"
+                reasons.append(f"{code}: {e}")
+                log.warning("%s: rejected output (attempt %d, %s): %s", self.agent_id, attempt, code, str(e)[:200])
                 messages = messages + [
                     ChatMessage(role="assistant", content=resp.text[:2000]),
-                    repair_message(resp.text, last_err),
+                    repair_message(resp.text, str(e)),
                 ]
-        raise AgentTurnError(f"{self.agent_id}: no valid PEX JSON after retries: {last_err[:300]}")
+        raise AgentTurnError(
+            f"{self.agent_id}: no valid decision after {max_attempts} attempts: {reasons[-1][:300]}",
+            agent_id=self.agent_id,
+            kind="invalid_output",
+            attempts=max_attempts,
+            tokens=tokens,
+            latency_ms=latency,
+            raw_responses=raw,
+            repair_reasons=reasons,
+        )
 
-    # ---- 3. select tag (normalise against PXP rules) ---------------------------
+    # ---- 3. select tag ---------------------------------------------------------
     def select_tag(self, decision: AgentDecision, snapshot: BlackboardSnapshot) -> AgentDecision:
-        contribs = snapshot.contributions
-        ids = {c.contribution_id for c in contribs}
-        d = decision.model_copy(deep=True)
-        if not contribs:
-            # empty board: the only meaningful move is an opening hypothesis
-            d.tag, d.target_contribution_id = PXPTag.REVISE, None
-            return d
-        if d.target_contribution_id not in ids:
-            # small models often truncate UUIDs: accept a unique prefix, else fall back
-            t = (d.target_contribution_id or "").strip()
-            hits = [i for i in ids if len(t) >= 6 and i.startswith(t)]
-            d.target_contribution_id = hits[0] if len(hits) == 1 else self._default_target(snapshot)
-        # RATIFY means agreeing with the target: inherit its claim if the model drifted
-        if d.tag == PXPTag.RATIFY:
-            target = next(c for c in contribs if c.contribution_id == d.target_contribution_id)
-            if d.prediction.claim.strip().lower() != target.payload.prediction.claim.strip().lower():
-                d.prediction.summary = d.prediction.summary or d.prediction.claim
-                d.prediction.claim = target.payload.prediction.claim
-        return d
-
-    def _default_target(self, snapshot: BlackboardSnapshot) -> str:
-        """Latest post by another agent, else the latest post."""
-        for c in reversed(snapshot.contributions):
-            if c.agent_id != self.agent_id:
-                return c.contribution_id
-        return snapshot.contributions[-1].contribution_id
+        """Validate a decision against the board (raises DecisionSemanticError). Kept for callers of the old API."""
+        return validate_decision(decision, snapshot)[0]
 
     # ---- build contract object -------------------------------------------------
     def to_contribution(
@@ -174,17 +233,19 @@ class PEXAgent:
         extra_instructions: Optional[str] = None,
         is_counterfactual: bool = False,
     ) -> AgentContribution:
-        """read -> formulate -> select tag -> AgentContribution (does NOT write to the board)."""
+        """read -> formulate + validate -> AgentContribution (does NOT write to the board)."""
         t0 = time.perf_counter()
-        decision, tokens, _, attempts = self.formulate(snapshot, extra_instructions)
-        decision = self.select_tag(decision, snapshot)
+        f = self.formulate(snapshot, extra_instructions)
         return self.to_contribution(
             snapshot,
-            decision,
-            tokens=tokens,
+            f.decision,
+            tokens=f.tokens,
             latency_ms=(time.perf_counter() - t0) * 1000,
             is_counterfactual=is_counterfactual,
-            parse_attempts=attempts,
+            parse_attempts=f.attempts,
+            repair_reasons=f.repair_reasons,
+            normalizations=f.normalizations,
+            raw_responses=f.raw_responses,
         )
 
     def step(self, board: BoardClient, session_id: str, extra_instructions: Optional[str] = None) -> AgentContribution:

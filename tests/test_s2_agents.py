@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import threading
 
 import pytest
@@ -117,28 +118,109 @@ def new_board():
     return board, snap.session_id
 
 
-def test_first_turn_is_forced_to_revise_and_valid_contract():
-    be = MockBackend([json.dumps(default_decision(tag="REJECT", claim="42", target="bogus"))])
+def post_first(board, sid, claim="42"):
+    with broker_with(MockBackend([json.dumps(default_decision(claim=claim))])) as b:
+        return PEXAgent("a0", "general_reasoner", b).step(board, sid)
+
+
+def test_first_turn_revise_is_valid_contract_and_drops_impossible_target():
+    be = MockBackend([json.dumps(default_decision(tag="REVISE", claim="42", target="bogus"))])
     board, sid = new_board()
     with broker_with(be) as b:
-        agent = PEXAgent("a0", "general_reasoner", b)
-        c = agent.step(board, sid)
+        c = PEXAgent("a0", "general_reasoner", b).step(board, sid)
     assert isinstance(c, AgentContribution)
     assert c.tag == PXPTag.REVISE and c.target_contribution_id is None and c.turn_index == 0
     assert c.token_usage > 0 and c.metadata["persona"] == "general_reasoner"
+    assert c.metadata["normalizations"] == ["dropped_target_on_empty_board"]
     assert board.get_snapshot(sid).active_claim.claim == "42"
 
 
-def test_invalid_target_is_repointed_and_ratify_inherits_claim():
+def test_non_revise_on_empty_board_is_reprompted_not_rewritten():
+    be = MockBackend([
+        json.dumps(default_decision(tag="REJECT", claim="42", target="bogus")),
+        json.dumps(default_decision(tag="REVISE", claim="42")),
+    ])
     board, sid = new_board()
-    with broker_with(MockBackend([json.dumps(default_decision(claim="42"))])) as b:
-        first = PEXAgent("a0", "general_reasoner", b).step(board, sid)
-    ratify = json.dumps(default_decision(tag="RATIFY", claim="forty two", target="nope"))
-    with broker_with(MockBackend([ratify])) as b:
+    with broker_with(be) as b:
+        c = PEXAgent("a0", "general_reasoner", b).step(board, sid)
+    assert c.tag == PXPTag.REVISE and c.metadata["parse_attempts"] == 2
+    assert c.metadata["repair_reasons"][0].startswith("non_revise_on_empty_board")
+    assert len(c.metadata["raw_responses"]) == 2
+
+
+def test_contradictory_ratify_never_becomes_agreement():
+    """S2.2: a RATIFY carrying a different claim must not be rewritten into the target's claim."""
+    board, sid = new_board()
+    first = post_first(board, sid)
+    bad = json.dumps(default_decision(tag="RATIFY", claim="forty three", target=first.contribution_id))
+    be = MockBackend([bad])
+    with broker_with(be) as b:
+        with pytest.raises(AgentTurnError) as ei:
+            PEXAgent("a1", "general_critic", b, max_parse_retries=2).step(board, sid)
+    e = ei.value
+    assert e.kind == "invalid_output" and e.attempts == 3 and e.tokens > 0
+    assert len(e.raw_responses) == 3 and all(r == bad for r in e.raw_responses)
+    assert all(r.startswith("ratify_claim_mismatch") for r in e.repair_reasons)
+    assert e.to_record()["agent_id"] == "a1"
+    assert len(board.get_snapshot(sid).contributions) == 1  # nothing was committed
+    # the repair prompt carried the real semantic error, not a generic one
+    assert "forty three" in be.calls[1].messages[-1].content
+
+
+def test_contradictory_ratify_can_be_corrected_by_the_model_itself():
+    board, sid = new_board()
+    first = post_first(board, sid)
+    be = MockBackend([
+        json.dumps(default_decision(tag="RATIFY", claim="forty three", target=first.contribution_id)),
+        json.dumps(default_decision(tag="REVISE", claim="43", target=first.contribution_id)),
+    ])
+    with broker_with(be) as b:
         c = PEXAgent("a1", "general_critic", b).step(board, sid)
-    assert c.tag == PXPTag.RATIFY
+    assert c.tag == PXPTag.REVISE and c.payload.prediction.claim == "43"
+    assert c.metadata["parse_attempts"] == 2
+
+
+def test_ratify_matches_claim_up_to_case_whitespace_punctuation():
+    board, sid = new_board()
+    first = post_first(board, sid, claim="The answer is 42")
+    ok = json.dumps(default_decision(tag="RATIFY", claim="  the answer  is 42. ", target=first.contribution_id))
+    with broker_with(MockBackend([ok])) as b:
+        c = PEXAgent("a1", "general_critic", b).step(board, sid)
+    assert c.tag == PXPTag.RATIFY and c.payload.prediction.claim == "The answer is 42"
+    assert c.metadata["parse_attempts"] == 1 and c.metadata["repair_reasons"] == []
+
+
+@pytest.mark.parametrize("tag,target,code", [
+    ("RATIFY", "nope", "unknown_target"),
+    ("REFUTE", None, "missing_target"),
+    ("REVISE", "nope", "unknown_target"),
+])
+def test_invalid_target_is_not_redirected(tag, target, code):
+    """S2.2: an unknown or missing target must not be pointed at some other post."""
+    board, sid = new_board()
+    post_first(board, sid)
+    with broker_with(MockBackend([json.dumps(default_decision(tag=tag, claim="42", target=target))])) as b:
+        with pytest.raises(AgentTurnError) as ei:
+            PEXAgent("a1", "general_critic", b, max_parse_retries=1).step(board, sid)
+    assert ei.value.repair_reasons[-1].startswith(code)
+
+
+def test_truncated_id_is_completed_only_when_unique():
+    board, sid = new_board()
+    first = post_first(board, sid)
+    short = json.dumps(default_decision(tag="REFUTE", claim="41", target=first.contribution_id[:8]))
+    with broker_with(MockBackend([short])) as b:
+        c = PEXAgent("a1", "general_critic", b).step(board, sid)
     assert c.target_contribution_id == first.contribution_id
-    assert c.payload.prediction.claim == "42"
+    assert c.metadata["normalizations"] == ["completed_unique_id_prefix"]
+
+
+def test_model_failure_is_recorded_as_such():
+    board, sid = new_board()
+    with broker_with(MockBackend(fail_first_n=9), max_retries=0) as b:
+        with pytest.raises(AgentTurnError) as ei:
+            PEXAgent("a0", "general_reasoner", b).step(board, sid)
+    assert ei.value.kind == "model_failure" and ei.value.raw_responses == []
 
 
 def test_agent_repairs_invalid_json_via_reprompt():
@@ -207,7 +289,8 @@ def test_multi_turn_debate_on_stub_board():
         if "(empty" in user:
             return json.dumps(default_decision(claim="42"))
         tag = "REFUTE" if "general_critic" in r.messages[0].content.lower() and "REFUTE" not in user else "RATIFY"
-        return json.dumps(default_decision(tag=tag, claim="42"))
+        target = re.findall(r"\[id=([^\]]+)\]", user)[-1]
+        return json.dumps(default_decision(tag=tag, claim="42", target=target))
 
     board, sid = new_board()
     with broker_with(MockBackend(responder=responder)) as b:
