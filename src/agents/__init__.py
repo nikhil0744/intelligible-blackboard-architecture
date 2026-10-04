@@ -2,7 +2,15 @@
 
 from .base import AgentTurnError, Formulation, PEXAgent
 from .board_client import BoardClient, InMemoryBoard, StaleTurnError
-from .panel import BENCHMARK_DOMAIN, aact, act_parallel, build_panel, build_panel_for_benchmark
+from .panel import (
+    BENCHMARK_DOMAIN,
+    aact,
+    act_parallel,
+    build_panel,
+    build_panel_for_benchmark,
+    panel_manifest,
+    register_panel,
+)
 
 __all__ = [
     "AgentTurnError",
@@ -16,4 +24,6 @@ __all__ = [
     "act_parallel",
     "build_panel",
     "build_panel_for_benchmark",
+    "panel_manifest",
+    "register_panel",
 ]

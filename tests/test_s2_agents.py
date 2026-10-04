@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from agents import InMemoryBoard, PEXAgent, StaleTurnError, act_parallel, build_panel
+from agents import InMemoryBoard, PEXAgent, StaleTurnError, act_parallel, build_panel, panel_manifest, register_panel
 from agents.base import AgentTurnError
 from contracts.schemas import AgentContribution, AgentRole, BenchmarkType, PXPTag
 from llm_broker import ChatMessage, LLMError, LLMRequest, ModelBroker
@@ -246,7 +246,9 @@ def test_counterfactual_hooks_for_s3():
         a = PEXAgent("a0", "general_reasoner", b, counterfactual_capable=True)
         a.system_addendum = "Reconsider your earlier REJECT."
         c = a.act(board.get_snapshot(sid), is_counterfactual=True)
-    assert c.is_counterfactual and c.agent_role == AgentRole.COUNTERFACTUAL
+    # capability is recorded separately; the persona keeps its domain role (S2.1)
+    assert c.is_counterfactual and c.agent_role == a.persona.role != AgentRole.COUNTERFACTUAL
+    assert c.metadata["counterfactual_capable"] is True
     assert "Reconsider your earlier REJECT." in be.calls[0].messages[0].content
 
 
@@ -302,3 +304,106 @@ def test_multi_turn_debate_on_stub_board():
     assert [c.turn_index for c in snap.contributions] == list(range(6))
     assert snap.contributions[0].tag == PXPTag.REVISE
     assert "turn 5" in render_board(snap) or "turn 4" in render_board(snap)
+
+
+# ---------------- S2.1: scheduler integration + matched conditions ----------------
+def debate_responder(r: LLMRequest):
+    """First post proposes 42; everyone after ratifies the latest post on the board."""
+    user = r.messages[1].content
+    if "(empty" in user:
+        return json.dumps(default_decision(claim="42"))
+    target = re.findall(r"\[id=([^\]]+)\]", user)[-1]
+    return json.dumps(default_decision(tag="RATIFY", claim="42", target=target))
+
+
+def test_all_density_conditions_share_one_roster():
+    """Only counterfactual capability may differ between the 0/1/2/3 conditions."""
+    with broker_with(MockBackend()) as b:
+        specs = [panel_manifest(build_panel(b, domain="medical", size=3, counterfactual_count=n, seed=7))
+                 for n in range(4)]
+    capable = [{s["agent_id"] for s in sp if s["counterfactual_capable"]} for sp in specs]
+    assert [len(c) for c in capable] == [0, 1, 2, 3]
+    assert capable[0] < capable[1] < capable[2] < capable[3]  # nested conditions
+    strip = lambda sp: [{k: v for k, v in s.items() if k != "counterfactual_capable"} for s in sp]
+    assert strip(specs[0]) == strip(specs[1]) == strip(specs[2]) == strip(specs[3])
+    assert all(s["role"] != AgentRole.COUNTERFACTUAL.value for sp in specs for s in sp)
+
+
+def test_capability_does_not_change_the_prompt():
+    board, sid = new_board()
+    snap = board.get_snapshot(sid)
+    prompts_by_n = []
+    for n in (0, 3):
+        be = MockBackend()
+        with broker_with(be) as b:
+            act_parallel(build_panel(b, size=3, counterfactual_count=n), snap)
+        prompts_by_n.append(sorted((c.agent_id, c.seed, c.temperature, tuple(m.content for m in c.messages))
+                                   for c in be.calls))
+    assert prompts_by_n[0] == prompts_by_n[1]
+
+
+def test_counterfactual_count_out_of_range_is_rejected():
+    with broker_with(MockBackend()) as b:
+        with pytest.raises(ValueError):
+            build_panel(b, size=3, counterfactual_count=4)
+
+
+def test_agent_as_handler_generates_without_committing():
+    board, sid = new_board()
+    with broker_with(MockBackend()) as b:
+        agent = PEXAgent("a0", "general_reasoner", b)
+        c = agent(board.get_snapshot(sid), None)
+    assert isinstance(c, AgentContribution)
+    assert board.get_snapshot(sid).contributions == []
+
+
+def test_handler_passes_scheduled_target_as_hint_only_if_on_board():
+    from contracts.schemas import ScheduledTurn
+
+    board, sid = new_board()
+    first = post_first(board, sid)
+    snap = board.get_snapshot(sid)
+    be = MockBackend(responder=debate_responder)
+    with broker_with(be) as b:
+        agent = PEXAgent("a1", "general_critic", b)
+        agent(snap, ScheduledTurn(session_id=sid, agent_id="a1", target_contribution_id=first.contribution_id))
+        agent(snap, ScheduledTurn(session_id=sid, agent_id="a1", target_contribution_id="not-on-board"))
+    assert first.contribution_id in be.calls[0].messages[0].content
+    assert "not-on-board" not in be.calls[1].messages[0].content
+
+
+@pytest.mark.parametrize("n_capable", [0, 1, 2, 3])
+def test_real_pexagent_runs_under_scheduler_in_every_condition(n_capable):
+    """The real PEXAgent class (offline broker) completes a scheduler session; the scheduler commits."""
+    from scheduler.engine import DeterministicScheduler
+    from scheduler.policies import RoundRobinPolicy
+    from storage.redis_store import InMemoryRedisClient, RedisBlackboardStore
+
+    store = RedisBlackboardStore(redis_client=InMemoryRedisClient())
+    sid = f"s2_sched_{n_capable}"
+    store.create_session(sid, "t1", "What is 6*7?")
+    with broker_with(MockBackend(responder=debate_responder)) as b:
+        panel = build_panel(b, size=3, counterfactual_count=n_capable)
+        # round-robin: the default reactive policy currently starves the third agent (S1.3)
+        sched = DeterministicScheduler(session_id=sid, store=store, policy=RoundRobinPolicy(), consensus_threshold=3)
+        register_panel(sched, panel)
+        snap = sched.run(max_turns=10)
+    assert snap.status.value == "CONSENSUS"
+    assert {c.agent_id for c in snap.contributions} == {a.agent_id for a in panel}  # capable agents get ordinary turns
+    assert all(c.metadata["model"] == "mock-7b" for c in snap.contributions)
+    assert sum(1 for c in snap.contributions if c.tag == PXPTag.RATIFY) >= 3
+
+
+def test_failed_turn_under_scheduler_is_an_error_not_a_ratify():
+    from scheduler.engine import DeterministicScheduler
+    from storage.redis_store import InMemoryRedisClient, RedisBlackboardStore
+
+    store = RedisBlackboardStore(redis_client=InMemoryRedisClient())
+    store.create_session("s2_fail", "t1", "What is 6*7?")
+    with broker_with(MockBackend(["not json"])) as b:
+        sched = DeterministicScheduler(session_id="s2_fail", store=store)
+        register_panel(sched, build_panel(b, size=3, max_parse_retries=1))
+        with pytest.raises(AgentTurnError):
+            sched.step()
+    assert store.get_snapshot("s2_fail").contributions == []
+

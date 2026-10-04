@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from contracts.schemas import (
     AgentContribution,
@@ -93,6 +93,13 @@ class PEXAgent:
     Stateless between turns: everything it knows comes from the snapshot, so S3 can
     replay it on a deep-copied/modified history (`act(..., is_counterfactual=True)`).
     `system_addendum` is the hook S3's recovery loop uses to adjust the agent's prompt.
+
+    Generating is separate from committing: `act()` / calling the agent only returns a
+    contribution; the scheduler (S1) decides whether and in what order to commit it.
+
+    `counterfactual_capable` is the experimental variable and nothing else: it does not
+    change the agent's role, persona, prompt, model, decoding settings or seed, so the
+    0/1/2/3-capable conditions run the same roster.
     """
 
     def __init__(
@@ -124,7 +131,25 @@ class PEXAgent:
 
     @property
     def role(self) -> AgentRole:
-        return AgentRole.COUNTERFACTUAL if self.counterfactual_capable else self.persona.role
+        """Domain role of the persona. Counterfactual capability never changes it."""
+        return self.persona.role
+
+    def spec(self) -> Dict[str, Any]:
+        """Agent specification for run manifests: who this agent is and how it decodes."""
+        return {
+            "agent_id": self.agent_id,
+            "persona": self.persona.id,
+            "role": self.role.value,
+            "domain": self.persona.domain,
+            "counterfactual_capable": self.counterfactual_capable,
+            "model": self.model or self.broker.default_model,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "max_parse_retries": self.max_parse_retries,
+            "max_history": self.max_history,
+            "seed": self.seed,
+            "use_json_schema": self.use_json_schema,
+        }
 
     # ---- 1. read ------------------------------------------------------------
     def read(self, snapshot: BlackboardSnapshot, extra_instructions: Optional[str] = None) -> List[ChatMessage]:
@@ -222,6 +247,7 @@ class PEXAgent:
                 "persona": self.persona.id,
                 "domain": self.persona.domain,
                 "model": self.model or self.broker.default_model,
+                "counterfactual_capable": self.counterfactual_capable,
                 **metadata,
             },
         )
@@ -247,6 +273,21 @@ class PEXAgent:
             normalizations=f.normalizations,
             raw_responses=f.raw_responses,
         )
+
+    # ---- scheduler handler adapter (S2.1) --------------------------------------
+    def __call__(self, snapshot: BlackboardSnapshot, turn: Any = None) -> AgentContribution:
+        """Scheduler handler: `scheduler.register_agent(id, role, turn_handler=agent)`.
+
+        Generates a contribution from the snapshot the scheduler hands over and returns
+        it uncommitted. If the scheduled turn names a post that is on the board, the agent
+        is told which post it was asked to respond to; it still chooses its own tag/target.
+        Raises AgentTurnError (a recorded failure) if no valid contribution is produced.
+        """
+        hint = None
+        target = getattr(turn, "target_contribution_id", None)
+        if target and any(c.contribution_id == target for c in snapshot.contributions):
+            hint = f"The scheduler asked you to respond to the post with id={target}."
+        return self.act(snapshot, extra_instructions=hint)
 
     def step(self, board: BoardClient, session_id: str, extra_instructions: Optional[str] = None) -> AgentContribution:
         """act() against the live board, then submit. Retries once if the board moved on."""
