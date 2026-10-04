@@ -51,6 +51,7 @@ class ModelBroker:
         self._pool: Optional[ThreadPoolExecutor] = None
         self._pool_lock = threading.Lock()
         self.ledger = ledger or UsageLedger()
+        self.settings = None  # InferenceSettings when built by llm_broker.config
         self._stats_lock = threading.Lock()
         self._total = UsageStats()
         self._per_agent: Dict[str, UsageStats] = {}
