@@ -176,7 +176,6 @@ class MSCoReIngestor:
                 "domain": item.domain,
                 "context": item.context,
                 "choices": item.choices,
-                "ground_truth": item.ground_truth,
             },
             status=BlackboardStatus.ACTIVE,
             version=0,

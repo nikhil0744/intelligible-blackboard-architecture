@@ -22,7 +22,7 @@ from contracts.schemas import (
     BlackboardStatus,
     TrialConfig,
 )
-from ingest.base import BaseBenchmarkAdapter, IngestionError
+from ingest.base import BaseBenchmarkAdapter, IngestionError, strip_reference_solutions
 
 # Canonical KramaBench domains (ICLR 2026 / MIT DSG)
 KRAMABENCH_DOMAINS: List[str] = [
@@ -290,7 +290,7 @@ class KramaBenchTask(BenchmarkTask):
             task_id=self.task_id,
             problem_statement=self.problem_statement,
             ground_truth=self.ground_truth,
-            initial_context=dict(self.initial_context),
+            initial_context=strip_reference_solutions(dict(self.initial_context)),
             status=BlackboardStatus.ACTIVE,
             entries=[],
             active_branches=["main"],

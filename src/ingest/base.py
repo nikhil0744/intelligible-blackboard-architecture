@@ -8,11 +8,41 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import json
 from pathlib import Path
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
+from typing import Any, Dict, Generic, List, Optional, Set, Type, TypeVar, Union
 
 from contracts.schemas import BenchmarkTask, BlackboardState, TrialConfig
 
 TaskT = TypeVar("TaskT", bound=BenchmarkTask)
+
+SOLUTION_KEYS: Set[str] = {
+    "ground_truth",
+    "solution",
+    "sol",
+    "target_diagnosis",
+    "reference_answer",
+    "expected_output",
+    "target_insight",
+    "correct_answer",
+    "answer",
+    "label",
+}
+
+
+def strip_reference_solutions(data: Any) -> Any:
+    """
+    Recursively remove reference solutions from a dictionary or list
+    so agent-visible context cannot leak ground truth answers to deliberating agents.
+    Preserves task IDs, answer types, and problem constraints.
+    """
+    if isinstance(data, dict):
+        return {
+            k: strip_reference_solutions(v)
+            for k, v in data.items()
+            if k.lower() not in SOLUTION_KEYS
+        }
+    elif isinstance(data, list):
+        return [strip_reference_solutions(x) for x in data]
+    return data
 
 
 class IngestionError(Exception):
@@ -178,6 +208,7 @@ class BaseBenchmarkAdapter(ABC, Generic[TaskT]):
         self,
         task: Union[TaskT, Dict[str, Any]],
         session_id: Optional[str] = None,
+        strip_solutions: bool = True,
     ) -> BlackboardState:
         """
         Format a benchmark task into an initialized BlackboardState contract.
@@ -185,6 +216,7 @@ class BaseBenchmarkAdapter(ABC, Generic[TaskT]):
         Args:
             task: Pre-parsed TaskT or raw task dictionary.
             session_id: Optional custom session ID.
+            strip_solutions: If True (default), strips reference solutions from agent-visible initial_context.
             
         Returns:
             BlackboardState ready for Blackboard repository or Scheduler initialization.
@@ -193,7 +225,10 @@ class BaseBenchmarkAdapter(ABC, Generic[TaskT]):
             task_obj = self.load_from_dict(task)
         else:
             task_obj = task
-        return task_obj.to_blackboard_state(session_id=session_id)
+        state = task_obj.to_blackboard_state(session_id=session_id)
+        if strip_solutions and state.initial_context:
+            state.initial_context = strip_reference_solutions(state.initial_context)
+        return state
 
     def format_for_trial(
         self,
