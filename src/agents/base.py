@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from contracts.schemas import (
     AgentContribution,
@@ -18,7 +18,9 @@ from prompts import (
     DecisionParseError,
     DecisionSemanticError,
     Persona,
-    build_messages,
+    PromptBudgetReport,
+    build_prompt,
+    estimate_tokens,
     decision_json_schema,
     get_persona,
     parse_decision,
@@ -36,9 +38,10 @@ class Formulation:
     """Outcome of one agent turn's model calls, including every repair attempt."""
 
     decision: AgentDecision
-    tokens: int
+    tokens: Optional[int]  # None if the backend did not report usage for some call (unknown, not zero)
     latency_ms: float
     attempts: int
+    prompt_budget: Optional[PromptBudgetReport] = None
     raw_responses: List[str] = field(default_factory=list)
     # why each earlier attempt was rejected, e.g. "invalid_json: ..." or "ratify_claim_mismatch: ..."
     repair_reasons: List[str] = field(default_factory=list)
@@ -60,7 +63,7 @@ class AgentTurnError(RuntimeError):
         agent_id: str = "",
         kind: str = "invalid_output",
         attempts: int = 0,
-        tokens: int = 0,
+        tokens: Optional[int] = 0,
         latency_ms: float = 0.0,
         raw_responses: Optional[List[str]] = None,
         repair_reasons: Optional[List[str]] = None,
@@ -115,6 +118,8 @@ class PEXAgent:
         seed: Optional[int] = None,
         use_json_schema: bool = True,
         counterfactual_capable: bool = False,
+        context_tokens: Optional[int] = 8192,
+        prompt_margin_tokens: int = 64,
     ):
         self.agent_id = agent_id
         self.persona = get_persona(persona) if isinstance(persona, str) else persona
@@ -127,6 +132,9 @@ class PEXAgent:
         self.seed = seed
         self.use_json_schema = use_json_schema
         self.counterfactual_capable = counterfactual_capable
+        # Must equal the backend's context window (LLM_NUM_CTX). None disables the prompt budget.
+        self.context_tokens = context_tokens
+        self.prompt_margin_tokens = prompt_margin_tokens
         self.system_addendum: Optional[str] = None
 
     @property
@@ -147,25 +155,57 @@ class PEXAgent:
             "max_tokens": self.max_tokens,
             "max_parse_retries": self.max_parse_retries,
             "max_history": self.max_history,
+            "context_tokens": self.context_tokens,
+            "prompt_token_budget": self.prompt_token_budget,
             "seed": self.seed,
             "use_json_schema": self.use_json_schema,
         }
 
+    @property
+    def prompt_token_budget(self) -> Optional[int]:
+        """Tokens available for the prompt: context window minus the reserved response and a margin."""
+        if self.context_tokens is None:
+            return None
+        return max(self.context_tokens - self.max_tokens - self.prompt_margin_tokens, 0)
+
     # ---- 1. read ------------------------------------------------------------
     def read(self, snapshot: BlackboardSnapshot, extra_instructions: Optional[str] = None) -> List[ChatMessage]:
+        return self.read_with_report(snapshot, extra_instructions)[0]
+
+    def read_with_report(
+        self,
+        snapshot: BlackboardSnapshot,
+        extra_instructions: Optional[str] = None,
+        must_keep_ids: Sequence[str] = (),
+    ):
+        """Build the prompt inside the token budget; returns (messages, PromptBudgetReport)."""
         extra = "\n".join(x for x in (self.system_addendum, extra_instructions) if x) or None
-        return build_messages(self.persona, snapshot, self.agent_id, extra, self.max_history)
+        return build_prompt(
+            self.persona,
+            snapshot,
+            self.agent_id,
+            extra,
+            self.max_history,
+            token_budget=self.prompt_token_budget,
+            must_keep_ids=must_keep_ids,
+        )
 
     # ---- 2. formulate + validate ----------------------------------------------
-    def formulate(self, snapshot: BlackboardSnapshot, extra_instructions: Optional[str] = None) -> Formulation:
+    def formulate(
+        self,
+        snapshot: BlackboardSnapshot,
+        extra_instructions: Optional[str] = None,
+        must_keep_ids: Sequence[str] = (),
+    ) -> Formulation:
         """Call the model until its output is valid JSON AND consistent with the board.
 
         Each rejected attempt is re-prompted with the actual error (shape or semantic).
         After `max_parse_retries` repairs the turn fails with AgentTurnError; nothing is
         ever patched into agreement. Raw responses and reasons are kept either way.
         """
-        messages = self.read(snapshot, extra_instructions)
-        tokens, latency = 0, 0.0
+        messages, budget = self.read_with_report(snapshot, extra_instructions, must_keep_ids)
+        tokens: Optional[int] = 0
+        latency = 0.0
         raw: List[str] = []
         reasons: List[str] = []
         max_attempts = self.max_parse_retries + 1
@@ -178,6 +218,12 @@ class PEXAgent:
                 seed=self.seed,
                 json_schema=decision_json_schema() if self.use_json_schema else None,
                 agent_id=self.agent_id,
+                # ledger tags; trial_id / phase come from the caller's usage_scope
+                metadata={
+                    "session_id": snapshot.session_id,
+                    "is_repair": attempt > 1,
+                    "estimated_prompt_tokens": sum(estimate_tokens(m.content) + 8 for m in messages),
+                },
             )
             try:
                 resp = self.broker.generate(req)
@@ -192,12 +238,12 @@ class PEXAgent:
                     raw_responses=raw,
                     repair_reasons=reasons,
                 ) from e
-            tokens += resp.total_tokens
+            tokens = None if tokens is None or resp.total_tokens is None else tokens + resp.total_tokens
             latency += resp.latency_ms
             raw.append(resp.text)
             try:
                 decision, normalizations = validate_decision(parse_decision(resp.text), snapshot)
-                return Formulation(decision, tokens, latency, attempt, raw, reasons, normalizations)
+                return Formulation(decision, tokens, latency, attempt, budget, raw, reasons, normalizations)
             except DecisionParseError as e:
                 code = e.code if isinstance(e, DecisionSemanticError) else "invalid_json"
                 reasons.append(f"{code}: {e}")
@@ -227,7 +273,7 @@ class PEXAgent:
         self,
         snapshot: BlackboardSnapshot,
         decision: AgentDecision,
-        tokens: int = 0,
+        tokens: Optional[int] = 0,
         latency_ms: float = 0.0,
         is_counterfactual: bool = False,
         **metadata,
@@ -258,10 +304,15 @@ class PEXAgent:
         snapshot: BlackboardSnapshot,
         extra_instructions: Optional[str] = None,
         is_counterfactual: bool = False,
+        must_keep_ids: Sequence[str] = (),
     ) -> AgentContribution:
-        """read -> formulate + validate -> AgentContribution (does NOT write to the board)."""
+        """read -> formulate + validate -> AgentContribution (does NOT write to the board).
+
+        `token_usage` on the result is None when the backend did not report usage for
+        every call of this turn. Per-call detail is in `broker.ledger`.
+        """
         t0 = time.perf_counter()
-        f = self.formulate(snapshot, extra_instructions)
+        f = self.formulate(snapshot, extra_instructions, must_keep_ids)
         return self.to_contribution(
             snapshot,
             f.decision,
@@ -272,6 +323,7 @@ class PEXAgent:
             repair_reasons=f.repair_reasons,
             normalizations=f.normalizations,
             raw_responses=f.raw_responses,
+            prompt_budget=f.prompt_budget.model_dump() if f.prompt_budget else None,
         )
 
     # ---- scheduler handler adapter (S2.1) --------------------------------------
@@ -287,7 +339,7 @@ class PEXAgent:
         target = getattr(turn, "target_contribution_id", None)
         if target and any(c.contribution_id == target for c in snapshot.contributions):
             hint = f"The scheduler asked you to respond to the post with id={target}."
-        return self.act(snapshot, extra_instructions=hint)
+        return self.act(snapshot, extra_instructions=hint, must_keep_ids=[target] if hint else ())
 
     def step(self, board: BoardClient, session_id: str, extra_instructions: Optional[str] = None) -> AgentContribution:
         """act() against the live board, then submit. Retries once if the board moved on."""

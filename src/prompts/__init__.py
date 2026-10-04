@@ -1,5 +1,6 @@
 """Prompt matrix (Student 2): personas, PEX output schema, templates, parser."""
 
+from .budget import PromptBudgetReport, build_prompt, estimate_tokens
 from .parser import DecisionParseError, extract_json, parse_decision
 from .personas import Persona, domains, get_persona, list_personas
 from .schema import AgentDecision, decision_json_schema
@@ -11,9 +12,12 @@ __all__ = [
     "DecisionParseError",
     "DecisionSemanticError",
     "Persona",
+    "PromptBudgetReport",
     "build_messages",
+    "build_prompt",
     "decision_json_schema",
     "domains",
+    "estimate_tokens",
     "extract_json",
     "get_persona",
     "list_personas",

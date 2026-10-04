@@ -2,7 +2,8 @@
 
 from .broker import ModelBroker
 from .config import build_broker_from_env
-from .types import ChatMessage, LLMError, LLMRequest, LLMResponse, UsageStats
+from .ledger import PHASES, UsageLedger, usage_scope
+from .types import CallRecord, ChatMessage, LLMError, LLMRequest, LLMResponse, UsageStats, UsageSummary
 
 __all__ = [
     "ModelBroker",
@@ -12,4 +13,9 @@ __all__ = [
     "LLMRequest",
     "LLMResponse",
     "UsageStats",
+    "UsageSummary",
+    "CallRecord",
+    "UsageLedger",
+    "usage_scope",
+    "PHASES",
 ]

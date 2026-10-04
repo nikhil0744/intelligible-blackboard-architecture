@@ -15,6 +15,10 @@ from typing import Any, Dict, List
 from ..types import LLMError, LLMRequest, LLMResponse
 
 
+def _count(v: Any) -> Any:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
 class OllamaBackend:
     name = "ollama"
 
@@ -75,7 +79,8 @@ class OllamaBackend:
             text=data.get("message", {}).get("content", ""),
             model=model,
             backend=self.name,
-            prompt_tokens=int(data.get("prompt_eval_count", 0) or 0),
-            completion_tokens=int(data.get("eval_count", 0) or 0),
+            # Ollama omits these counts in some cases (e.g. a fully cached prompt): report unknown, not 0.
+            prompt_tokens=_count(data.get("prompt_eval_count")),
+            completion_tokens=_count(data.get("eval_count")),
             latency_ms=latency,
         )

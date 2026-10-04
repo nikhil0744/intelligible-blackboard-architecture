@@ -9,13 +9,15 @@ import pytest
 
 from agents import InMemoryBoard, PEXAgent, StaleTurnError, act_parallel, build_panel, panel_manifest, register_panel
 from agents.base import AgentTurnError
-from contracts.schemas import AgentContribution, AgentRole, BenchmarkType, PXPTag
-from llm_broker import ChatMessage, LLMError, LLMRequest, ModelBroker
+from contracts.schemas import AgentContribution, AgentRole, BenchmarkType, Explanation, PEXPayload, Prediction, PXPTag
+from llm_broker import ChatMessage, LLMError, LLMRequest, ModelBroker, usage_scope
 from llm_broker.backends.mock import MockBackend, default_decision
 from prompts import (
     DecisionParseError,
+    build_prompt,
     decision_json_schema,
     domains,
+    estimate_tokens,
     get_persona,
     list_personas,
     parse_decision,
@@ -407,3 +409,168 @@ def test_failed_turn_under_scheduler_is_an_error_not_a_ratify():
             sched.step()
     assert store.get_snapshot("s2_fail").contributions == []
 
+
+# ---------------- S2.5: usage ledger, unknown usage, broker lifetime, prompt budget ----------------
+class NoUsageBackend(MockBackend):
+    """A backend that does not report token counts."""
+
+    def complete(self, request, model):
+        r = super().complete(request, model)
+        r.prompt_tokens = r.completion_tokens = None
+        return r
+
+
+def run_scripted_trial(broker, trial_id, size=3):
+    board, sid = new_board()
+    with usage_scope(trial_id=trial_id):
+        for agent in build_panel(broker, size=size):
+            agent.step(board, sid)
+    return broker.trial_usage(trial_id)
+
+
+def test_unknown_usage_is_unknown_not_zero():
+    board, sid = new_board()
+    with broker_with(NoUsageBackend()) as b:
+        with usage_scope(trial_id="t-unknown"):
+            c = PEXAgent("a0", "general_reasoner", b).step(board, sid)
+        u = b.trial_usage("t-unknown")
+        assert c.token_usage is None
+        assert u.calls == 1 and u.unknown_usage_calls == 1
+        assert u.total_tokens is None and u.known_total_tokens == 0
+        assert b.usage().unknown_usage_calls == 1
+
+
+def test_equal_scripted_trials_report_equal_cost_not_cumulative():
+    with broker_with(MockBackend(responder=debate_responder)) as b:
+        first = run_scripted_trial(b, "trial-1")
+        second = run_scripted_trial(b, "trial-2")
+        assert first.calls == second.calls == 3
+        assert first.total_tokens == second.total_tokens and first.total_tokens > 0
+        assert b.usage().total_tokens == first.total_tokens + second.total_tokens  # running total is batch-wide
+        assert {r.trial_id for r in b.ledger.records()} == {"trial-1", "trial-2"}
+
+
+def test_broker_stays_usable_for_later_trials_after_close():
+    b = broker_with(MockBackend())
+    with b:
+        run_scripted_trial(b, "trial-1")
+    later = run_scripted_trial(b, "trial-2")  # after __exit__/close()
+    assert later.calls == 3 and later.failures == 0
+    assert len(b.generate_many([req("x"), req("y")])) == 2  # the thread pool comes back on demand
+    assert b.trial_usage("trial-1").calls == 3  # the ledger survived close()
+    b.close()
+
+
+def test_ledger_marks_repairs_phase_model_and_failures():
+    board, sid = new_board()
+    be = MockBackend(["not json", json.dumps(default_decision(claim="42"))])
+    with broker_with(be) as b:
+        with usage_scope(trial_id="t1", phase="candidate_replay"):
+            PEXAgent("a0", "general_reasoner", b).step(board, sid)
+        recs = b.ledger.records(trial_id="t1")
+    assert [r.is_repair for r in recs] == [False, True]
+    assert all(r.phase == "candidate_replay" and r.model == "mock-7b" and r.backend == "mock" for r in recs)
+    assert all(r.session_id == sid and r.agent_id == "a0" and r.estimated_prompt_tokens > 0 for r in recs)
+    assert b.trial_usage("t1").repairs == 1
+    assert set(b.ledger.by_phase("t1")) == {"candidate_replay"}
+
+    with broker_with(MockBackend(fail_first_n=9), max_retries=1) as b:
+        with usage_scope(trial_id="t2"):
+            with pytest.raises(LLMError):
+                b.generate(req("z"))
+        (rec,) = b.ledger.records(trial_id="t2")
+    assert rec.ok is False and rec.attempts == 2 and rec.error and rec.prompt_tokens is None
+    assert rec.phase == "deliberation"  # the default phase
+
+
+def test_usage_scope_reaches_worker_threads_and_rejects_unknown_phase():
+    board, sid = new_board()
+    with broker_with(MockBackend(), max_concurrency=3) as b:
+        with usage_scope(trial_id="par", phase="baseline_replay"):
+            act_parallel(build_panel(b, size=3), board.get_snapshot(sid))
+            b.generate_many([req("m1"), req("m2")])
+        recs = b.ledger.records(trial_id="par")
+    assert len(recs) == 5 and all(r.phase == "baseline_replay" for r in recs)
+    with pytest.raises(ValueError):
+        with usage_scope(phase="made_up"):
+            pass
+
+
+def test_ledger_can_mirror_to_jsonl(tmp_path):
+    path = tmp_path / "run" / "calls.jsonl"
+    with broker_with(MockBackend()) as b:
+        b.ledger.attach_file(path)
+        with usage_scope(trial_id="t1"):
+            b.generate(req("a"))
+            b.generate(req("b"))
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [r["agent_id"] for r in rows] == ["a", "b"] and all(r["trial_id"] == "t1" for r in rows)
+
+
+def long_board(n_posts=30, context=None, rationale_len=300):
+    """Board: post 0 = REVISE '42'; then alternating REFUTEs; every post targets the previous one."""
+    board = InMemoryBoard()
+    sid = board.create_session("t-long", "What is 6*7? Explain.", context or {}).session_id
+    prev = None
+    for i in range(n_posts):
+        c = AgentContribution(
+            session_id=sid,
+            turn_index=i,
+            agent_id=f"a{i % 3}",
+            agent_role=AgentRole.PRIMARY,
+            tag=PXPTag.REVISE if i == 0 else PXPTag.REFUTE,
+            target_contribution_id=prev,
+            payload=PEXPayload(
+                prediction=Prediction(claim="42" if i == 0 else f"not-{i}", confidence=0.5),
+                explanation=Explanation(rationale=f"reason {i} " + "x" * rationale_len, evidence=[]),
+            ),
+        )
+        board.submit(c)
+        prev = c.contribution_id
+    return board.get_snapshot(sid)
+
+
+def test_prompt_budget_keeps_task_active_position_target_and_dependency():
+    snap = long_board(30)
+    ids = [c.contribution_id for c in snap.contributions]
+    active, target, dependency = ids[0], ids[10], ids[9]  # active = the only REVISE; ids[10] targets ids[9]
+    persona = get_persona("general_reasoner")
+    msgs, rep = build_prompt(persona, snap, "a0", max_history=30, token_budget=2000, must_keep_ids=[target])
+    user = msgs[1].content
+    assert rep.estimated_prompt_tokens <= 2000 and not rep.over_budget
+    assert "What is 6*7? Explain." in user
+    for must in (active, target, dependency):
+        assert f"[id={must}]" in user and must in rep.protected_contribution_ids
+    assert f"[id={ids[-1]}]" in user  # newest post kept first among the rest
+    assert rep.omitted_contribution_ids and rep.truncated
+    assert all(f"[id={i}]" not in user for i in rep.omitted_contribution_ids)
+    assert rep.posts_included + len(rep.omitted_contribution_ids) == rep.posts_on_board == 30
+    assert sum(estimate_tokens(m.content) for m in msgs) <= 2000
+
+
+def test_prompt_budget_no_truncation_when_it_fits_and_context_is_last_resort():
+    persona = get_persona("general_reasoner")
+    _, rep = build_prompt(persona, long_board(3), "a0", token_budget=7000)
+    assert not rep.truncated and rep.posts_included == 3
+
+    snap = long_board(3, context={"notes": "y" * 5000})
+    _, rep = build_prompt(persona, snap, "a0", token_budget=1500)
+    assert rep.context_chars_kept < rep.context_chars_total  # context shortened, and recorded
+    assert set(rep.protected_contribution_ids) <= {c.contribution_id for c in snap.contributions}
+    assert not rep.over_budget
+
+    _, rep = build_prompt(persona, long_board(3), "a0", token_budget=50)
+    assert rep.over_budget  # reported, never silently dropped
+
+
+def test_agent_records_prompt_budget_in_contribution_metadata():
+    snap = long_board(30)
+    be = MockBackend([json.dumps(default_decision(tag="REFUTE", claim="41", target=snap.contributions[-1].contribution_id))])
+    with broker_with(be) as b:
+        agent = PEXAgent("a9", "general_critic", b, context_tokens=2400, max_tokens=768, max_history=30)
+        assert agent.prompt_token_budget == 2400 - 768 - 64
+        c = agent.act(snap)
+    pb = c.metadata["prompt_budget"]
+    assert pb["token_budget"] == 1568 and pb["omitted_contribution_ids"] and not pb["over_budget"]
+    assert pb["estimated_prompt_tokens"] <= 1568
+    assert agent.spec()["prompt_token_budget"] == 1568

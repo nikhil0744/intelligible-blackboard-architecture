@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import math
 import random
 from concurrent.futures import ThreadPoolExecutor
@@ -102,7 +103,8 @@ def act_parallel(
     each result has turn_index = len(snapshot.contributions), so S1 re-indexes on commit.
     """
     with ThreadPoolExecutor(max_workers=max_workers or len(agents) or 1) as ex:
-        futures = [ex.submit(a.act, snapshot) for a in agents]
+        # copy_context: keep the caller's usage_scope (trial / phase) in the worker threads
+        futures = [ex.submit(contextvars.copy_context().run, a.act, snapshot) for a in agents]
         out: List[AgentContribution | Exception] = []
         for f in futures:
             try:

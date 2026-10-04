@@ -52,7 +52,7 @@ class LiteLLMBackend:
             text=resp.choices[0].message.content or "",
             model=model,
             backend=self.name,
-            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            prompt_tokens=getattr(usage, "prompt_tokens", None),
+            completion_tokens=getattr(usage, "completion_tokens", None),
             latency_ms=(time.perf_counter() - t0) * 1000,
         )
