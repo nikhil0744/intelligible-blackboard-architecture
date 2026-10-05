@@ -507,6 +507,7 @@ def make_live_trial_executor(
                 output_path="outputs/live_trace.json",
                 hardware_info=f"{backend.upper()} • {model} (Density {int(config.counterfactual_density*100)}%)",
                 custom_title=f"Live Benchmark Trial: {config.task_id} ({config.benchmark_name.value})",
+                status_override=final_status,
             )
         except Exception:
             pass

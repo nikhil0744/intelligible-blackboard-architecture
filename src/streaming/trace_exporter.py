@@ -24,6 +24,7 @@ def export_snapshot(
     output_path: str = "outputs/live_trace.json",
     hardware_info: Optional[str] = None,
     custom_title: Optional[str] = None,
+    status_override: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Convert a BlackboardSnapshot into a standardized live visualizer trace JSON."""
     out_file = Path(output_path)
@@ -67,11 +68,14 @@ def export_snapshot(
     ]
 
     # 2. Build Step 0 (Init)
+    desc = snap.task_description or "No task description"
+    task_preview = f"{desc[:87]}..." if len(desc) > 90 else desc
+
     steps: List[Dict[str, Any]] = [
         {
             "step": 0,
             "turn": "T0 • INIT",
-            "narrative": f"Blackboard session initialized. Task: '{snap.task_description[:90]}...'",
+            "narrative": f"Blackboard session initialized. Task: '{task_preview}'",
             "agentActive": None,
             "tag": "IDLE",
             "attribution": "Blackboard Engine (Initialized)",
@@ -93,7 +97,7 @@ def export_snapshot(
     # 3. Build deliberation steps
     for idx, c in enumerate(snap.contributions):
         turn_num = idx + 1
-        agent_idx = agent_id_to_idx.get(c.agent_id, 0)
+        agent_idx = agent_id_to_idx.get(c.agent_id, None)
         tag_str = c.tag.value if hasattr(c.tag, "value") else str(c.tag)
         recent_tags.append(tag_str)
 
@@ -121,7 +125,11 @@ def export_snapshot(
 
         tok_cost = c.token_usage or 0
         total_tokens += tok_cost
-        latency_str = f" • {c.latency_ms:.1f}s" if c.latency_ms else ""
+        if c.latency_ms is not None:
+            latency_s = (c.latency_ms / 1000.0) if c.latency_ms > 50 else c.latency_ms
+            latency_str = f" • {latency_s:.1f}s"
+        else:
+            latency_str = ""
 
         narrative = f"{c.agent_id} submitted a {tag_str} assertion to the blackboard."
         if is_cf:
@@ -152,7 +160,11 @@ def export_snapshot(
         })
 
     # 4. Final summary step if consensus or termination reached
-    final_status_val = snap.status.value if hasattr(snap.status, "value") else str(snap.status)
+    if status_override is not None:
+        final_status_val = status_override.value if hasattr(status_override, "value") else str(status_override)
+    else:
+        final_status_val = snap.status.value if hasattr(snap.status, "value") else str(snap.status)
+
     if final_status_val in ("CONSENSUS", "RESOLVED", "DEADLOCK") or len(snap.contributions) > 1:
         final_turn_idx = len(steps)
         is_consensus = final_status_val in ("CONSENSUS", "RESOLVED") or any(
@@ -240,6 +252,7 @@ def export_from_board(
     output_path: str = "outputs/live_trace.json",
     hardware_info: Optional[str] = None,
     custom_title: Optional[str] = None,
+    status_override: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Extract snapshot from an InMemoryBoard and export visualizer live trace."""
     snap = board.get_snapshot(session_id)
@@ -248,6 +261,7 @@ def export_from_board(
         output_path=output_path,
         hardware_info=hardware_info,
         custom_title=custom_title,
+        status_override=status_override,
     )
 
 

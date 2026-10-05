@@ -1187,7 +1187,9 @@
           sel.value = "live";
         }
       } else {
-        // Fallback: attempt asynchronous fetch if running under local webserver
+        // Explicitly align dropdown with currentScenarioKey
+        const sel = document.getElementById("scenarioSelect");
+        if (sel) sel.value = currentScenarioKey;
         checkLiveTraceAsync();
       }
 
@@ -1217,9 +1219,24 @@
       currentScenarioKey = key;
       currentStep = 0;
       manualSandboxOverride = false;
+      const sbBtn = document.getElementById("sandboxToggleBtn");
+      if (sbBtn) {
+        sbBtn.innerText = "🔍 Inspect Sandbox";
+        sbBtn.style.borderColor = "rgba(168, 85, 247, 0.5)";
+      }
       if (isPlaying) togglePlay();
       renderScenarioUI();
       renderStep(0);
+    }
+
+    function setSafeContent(el, text) {
+      if (!el) return;
+      if (!text) { el.textContent = ""; return; }
+      if (typeof text === "string" && (text.includes("<br>") || text.includes("<strong>") || text.includes("<span") || text.includes("<div>"))) {
+        el.innerHTML = text;
+      } else {
+        el.textContent = text;
+      }
     }
 
     function renderScenarioUI() {
@@ -1227,11 +1244,22 @@
       document.getElementById("taskSpecText").innerText = scen.task;
       document.getElementById("totalStepNumber").innerText = scen.steps.length - 1;
 
-      // Update Agent Nodes
-      scen.agents.forEach((ag, idx) => {
-        document.getElementById(`agent${idx}Name`).innerText = ag.name;
-        document.getElementById(`agent${idx}Role`).innerText = ag.role;
-      });
+      // Update Agent Nodes with bounds and null safety (supports panels of any size)
+      for (let idx = 0; idx < 3; idx++) {
+        const ag = (scen.agents && scen.agents[idx]) || null;
+        const nameEl = document.getElementById(`agent${idx}Name`);
+        const roleEl = document.getElementById(`agent${idx}Role`);
+        const nodeEl = document.getElementById(`agent${idx}Node`);
+        if (ag && nameEl && roleEl) {
+          nameEl.innerText = ag.name;
+          roleEl.innerText = ag.role;
+          if (nodeEl) nodeEl.style.opacity = "1.0";
+        } else if (nodeEl && nameEl && roleEl) {
+          nameEl.innerText = "Inactive Slot";
+          roleEl.innerText = "OFFLINE";
+          nodeEl.style.opacity = "0.35";
+        }
+      }
 
       // Update Session ID & Hardware
       const sessEl = document.getElementById("sessionIdText");
@@ -1267,10 +1295,10 @@
       document.getElementById("turnLabel").innerText = data.turn;
       document.getElementById("narrativeText").innerText = data.narrative;
 
-      // Blackboard updates with attribution (supports rich HTML like metrics grids)
+      // Blackboard updates with attribution (safely handles clinical math tags like eGFR < 30)
       document.getElementById("bbAttribution").innerText = data.attribution;
-      document.getElementById("bbClaimText").innerHTML = data.claim;
-      document.getElementById("bbRationaleText").innerHTML = data.rationale;
+      setSafeContent(document.getElementById("bbClaimText"), data.claim);
+      setSafeContent(document.getElementById("bbRationaleText"), data.rationale);
       
       const tagBadge = document.getElementById("bbProtocolTag");
       tagBadge.className = `protocol-tag-badge tag-${data.tag}`;
@@ -1306,18 +1334,22 @@
       const bbCore = document.getElementById("blackboardCore");
       bbCore.className = "blackboard-core";
 
-      if (data.agentActive !== null) {
+      if (data.agentActive !== null && data.agentActive !== undefined && data.agentActive >= 0 && data.agentActive < 3) {
         const activeNode = document.getElementById(`agent${data.agentActive}Node`);
         const activeStatus = document.getElementById(`agent${data.agentActive}Status`);
-        activeNode.classList.add("active");
-        
-        let tagLower = data.tag.toLowerCase();
-        activeNode.classList.add(`speaking-${tagLower}`);
-        activeStatus.innerText = `Active • ${data.tag}`;
+        if (activeNode) {
+          activeNode.classList.add("active");
+          let tagLower = (data.tag || "idle").toLowerCase();
+          activeNode.classList.add(`speaking-${tagLower}`);
+        }
+        if (activeStatus) {
+          activeStatus.innerText = `Active • ${data.tag}`;
+        }
 
         // Glow SVG Path
         const path = document.getElementById(`pathAgent${data.agentActive}`);
         if (path) {
+          let tagLower = (data.tag || "idle").toLowerCase();
           path.classList.add("active", `active-${tagLower}`);
         }
       }
