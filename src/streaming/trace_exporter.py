@@ -100,6 +100,7 @@ def export_snapshot(
     had_sandbox = False
     total_tokens = 0
     recent_tags: List[str] = []
+    active_claim_str: Optional[str] = None
 
     # 3. Build deliberation steps
     for idx, c in enumerate(snap.contributions):
@@ -133,8 +134,10 @@ def export_snapshot(
         tok_cost = c.token_usage or 0
         total_tokens += tok_cost
         if c.latency_ms is not None:
-            latency_s = (c.latency_ms / 1000.0) if c.latency_ms > 50 else c.latency_ms
-            latency_str = f" • {latency_s:.1f}s"
+            if c.latency_ms >= 1000:
+                latency_str = f" • {c.latency_ms / 1000.0:.1f}s"
+            else:
+                latency_str = f" • {c.latency_ms:.0f}ms"
         else:
             latency_str = ""
 
@@ -149,8 +152,14 @@ def export_snapshot(
         raw_ev = getattr(c.payload.explanation, "evidence", None) if (c.payload and c.payload.explanation) else None
         if raw_ev is None and c.payload and c.payload.explanation:
             raw_ev = getattr(c.payload.explanation, "evidence_refs", None)
-        ev_refs = raw_ev or []
-        ev_str = ", ".join(str(x) for x in ev_refs) if ev_refs else "Clinical problem context"
+        
+        if isinstance(raw_ev, str):
+            ev_str = raw_ev
+        elif isinstance(raw_ev, (list, tuple, set)):
+            ev_str = ", ".join(str(x) for x in raw_ev) if raw_ev else "Clinical problem context"
+        else:
+            ev_str = "Clinical problem context"
+
         claim_text = c.payload.prediction.claim if c.payload and c.payload.prediction else "No assertion text"
         rationale_text = c.payload.explanation.rationale if c.payload and c.payload.explanation else "No rationale provided"
         conf_val = getattr(c.payload.prediction, "confidence", 1.0) if c.payload and c.payload.prediction else 1.0
@@ -158,7 +167,9 @@ def export_snapshot(
         rule_val = getattr(c.payload.explanation, "rule", None) if (c.payload and c.payload.explanation) else None
         if not rule_val and c.payload and c.payload.explanation:
             assumptions = getattr(c.payload.explanation, "assumptions", None)
-            if assumptions:
+            if isinstance(assumptions, str):
+                rule_val = assumptions
+            elif isinstance(assumptions, (list, tuple, set)):
                 rule_val = ", ".join(str(a) for a in assumptions)
             elif getattr(c.payload.explanation, "metadata", None):
                 rule_val = c.payload.explanation.metadata.get("rule")
@@ -229,9 +240,10 @@ def export_snapshot(
         })
 
     # 5. Sandbox metadata
-    if had_sandbox or has_deadlock:
-        target_name = snap.contributions[0].agent_id if snap.contributions else "agent_target"
-        summary_claim = active_claim_str if 'active_claim_str' in locals() else (steps[-1]["claim"] if steps else "Compromise resolution")
+    target_name = snap.contributions[0].agent_id if snap.contributions else "agent_target"
+    summary_claim = active_claim_str or (steps[-1]["claim"] if steps else "Compromise resolution")
+
+    if had_sandbox:
         sandbox_meta = {
             "branch": "ISOLATED COUNTERFACTUAL SANDBOX (Live Session)",
             "subtitle": f"Attributed collision at Turn {max(1, deadlock_step_idx)} • Hill-Climbing Search",
@@ -284,6 +296,39 @@ def export_snapshot(
                 },
             ],
         }
+    elif has_deadlock:
+        sandbox_meta = {
+            "branch": "ISOLATED COUNTERFACTUAL ENGINE (Impasse Unresolved)",
+            "subtitle": f"Attributed collision at Turn {max(1, deadlock_step_idx)} • Interventions Failed/Exhausted",
+            "peakScore": 0.54,
+            "trials": [
+                {
+                    "trial": 1,
+                    "title": "Trial 1 • Conflict Detected",
+                    "score": 0.54,
+                    "status": "UNRESOLVED DEADLOCK",
+                    "statusClass": "sub-threshold",
+                    "prompt": f"[DEADLOCK AT IMPASSE]\nTarget: {target_name}\nCollision at Turn {max(1, deadlock_step_idx)}\nTask: Deadlock could not be resolved within trial budget.",
+                    "response": "No consensus revision converged above threshold S_k ≥ 0.70.",
+                    "peerCritique": "Circular rejection persisted without ratification.",
+                    "action": "Session Terminated in Deadlock",
+                }
+            ],
+            "steps": [
+                {
+                    "title": "[1] Divergence Attribution",
+                    "desc": f"Identified Turn {max(1, deadlock_step_idx)} as conflicting state. Invariant failure detected.",
+                },
+                {
+                    "title": "[2] Simulation Exhausted",
+                    "desc": "Candidate trials failed to cross minimum agreement threshold S_k >= 0.70.",
+                },
+                {
+                    "title": "[3] Unresolved Impasse",
+                    "desc": "Deliberation halted without merge to prevent invalid clinical assertions.",
+                },
+            ],
+        }
     else:
         sandbox_meta = {
             "branch": "COUNTERFACTUAL ENGINE (Dormant - No Deadlock)",
@@ -301,6 +346,7 @@ def export_snapshot(
                 },
                 {
                     "title": "[3] Final Consensus",
+                    "desc": "Consensus ratified unanimously without requiring counterfactual intervention.",
                 },
             ],
         }

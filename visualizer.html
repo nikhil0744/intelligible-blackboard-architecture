@@ -1840,13 +1840,25 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
       const chamber = document.getElementById("simTrialsChamber");
       const btn = document.getElementById("sbTrialsToggleBtn");
       if (!chamber) return;
+      const scen = SCENARIOS[currentScenarioKey];
+      const count = (scen && scen.sandbox && scen.sandbox.trials && scen.sandbox.trials.length > 0) ? scen.sandbox.trials.length : 3;
       if (sandboxTrialsOpen) {
         chamber.classList.add("open");
         if (btn) btn.innerHTML = "<span>▴ Collapse Trials</span>";
       } else {
         chamber.classList.remove("open");
-        if (btn) btn.innerHTML = "<span>▾ Expand 3 Candidate Trials</span>";
+        if (btn) btn.innerHTML = `<span>▾ Expand ${count} Candidate Trials</span>`;
       }
+    }
+
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     function init() {
@@ -1906,11 +1918,7 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
     function setSafeContent(el, text) {
       if (!el) return;
       if (!text) { el.textContent = ""; return; }
-      if (typeof text === "string" && (text.includes("<br>") || text.includes("<strong>") || text.includes("<span") || text.includes("<div>"))) {
-        el.innerHTML = text;
-      } else {
-        el.textContent = text;
-      }
+      el.textContent = text;
     }
 
     function renderScenarioUI() {
@@ -1958,32 +1966,60 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
           if (summaryStateEl) summaryStateEl.innerText = `Attributed collision • ${scen.sandbox.trials.length} Search Trials Simulated`;
           if (peakScoreEl) peakScoreEl.innerText = `S_k = ${scen.sandbox.peakScore || 0.95}`;
           if (outcomeBadgeEl) {
-            outcomeBadgeEl.className = "protocol-tag-badge tag-RATIFY";
-            outcomeBadgeEl.innerText = "WINNER MERGED";
+            if (scen.sandbox.trials.some(t => t.statusClass === "winner")) {
+              outcomeBadgeEl.className = "protocol-tag-badge tag-RATIFY";
+              outcomeBadgeEl.innerText = "WINNER MERGED";
+            } else if (scen.sandbox.trials.some(t => t.status && t.status.includes("DEADLOCK"))) {
+              outcomeBadgeEl.className = "protocol-tag-badge tag-REJECT";
+              outcomeBadgeEl.innerText = "DEADLOCK UNRESOLVED";
+            } else {
+              outcomeBadgeEl.className = "protocol-tag-badge tag-PROPOSE";
+              outcomeBadgeEl.innerText = "SIMULATED";
+            }
           }
+
+          // Dynamically populate Score Trajectory Rail
+          const railEl = document.getElementById("simTrajectoryRail");
+          if (railEl) {
+            railEl.style.display = "flex";
+            railEl.innerHTML = `<span style="color: var(--text-muted); font-size: 10px;">SCORE TRAJECTORY:</span>` +
+              scen.sandbox.trials.map(t => `
+                <div class="sim-rail-item ${t.statusClass === 'winner' ? 'winner' : ''}">
+                  <span>Trial ${t.trial}: S_${t.trial}=${t.score}</span>
+                  <span>(${t.statusClass === 'winner' ? '🏆 WINNER' : (t.statusClass === 'critique' ? '⚠️ Critique' : '❌ Rejected')})</span>
+                </div>
+              `).join('<span style="color: var(--border-highlight);">➔</span>');
+          }
+
+          const sbTrialsToggleBtn = document.getElementById("sbTrialsToggleBtn");
+          if (sbTrialsToggleBtn) {
+            sbTrialsToggleBtn.style.display = "inline-flex";
+            sbTrialsToggleBtn.innerHTML = `<span>▾ Expand ${scen.sandbox.trials.length} Candidate Trials</span>`;
+          }
+
           if (trialsGridEl) {
             trialsGridEl.innerHTML = scen.sandbox.trials.map(t => `
-              <div class="trial-card ${t.statusClass || ''}">
+              <div class="trial-card ${escapeHTML(t.statusClass || '')}">
                 <div class="trial-header">
-                  <span class="trial-title">${t.title || `Trial ${t.trial}`}</span>
-                  <span class="trial-badge ${t.statusClass || 'sub-threshold'}">${t.status}</span>
+                  <span class="trial-title">${escapeHTML(t.title || `Trial ${t.trial}`)}</span>
+                  <span class="trial-badge ${escapeHTML(t.statusClass || 'sub-threshold')}">${escapeHTML(t.status)}</span>
                 </div>
                 <div>
                   <div class="trial-section-label">Dispatched Prompt (#cf_resolver):</div>
-                  <div class="trial-prompt-box">${t.prompt}</div>
+                  <div class="trial-prompt-box">${escapeHTML(t.prompt)}</div>
                 </div>
                 <div>
                   <div class="trial-section-label">Candidate Proposition:</div>
-                  <div class="trial-response-box">${t.response}</div>
+                  <div class="trial-response-box">${escapeHTML(t.response)}</div>
                 </div>
                 <div>
                   <div class="trial-section-label">Peer Reaction / Critique:</div>
-                  <div class="trial-critique-box">${t.peerCritique}</div>
+                  <div class="trial-critique-box">${escapeHTML(t.peerCritique)}</div>
                 </div>
                 ${t.action ? `
                 <div class="trial-action-box">
                   <span style="color: var(--text-muted);">Result:</span>
-                  <span style="color: var(--ratify);">${t.action}</span>
+                  <span style="color: var(--ratify);">${escapeHTML(t.action)}</span>
                 </div>` : ''}
               </div>
             `).join("");
@@ -1996,6 +2032,12 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
             outcomeBadgeEl.className = "protocol-tag-badge tag-RATIFY";
             outcomeBadgeEl.innerText = "LINEAR CONSENSUS";
           }
+          const railEl = document.getElementById("simTrajectoryRail");
+          if (railEl) railEl.style.display = "none";
+
+          const sbTrialsToggleBtn = document.getElementById("sbTrialsToggleBtn");
+          if (sbTrialsToggleBtn) sbTrialsToggleBtn.style.display = "none";
+
           if (trialsGridEl) {
             trialsGridEl.innerHTML = `
               <div style="grid-column: 1 / -1; padding: 22px; text-align: center; color: var(--text-muted); font-family: monospace; font-size: 11px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid var(--border);">
@@ -2043,7 +2085,7 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
         let tf = null;
         if (data.thoughtFlows && data.thoughtFlows[i]) {
           tf = data.thoughtFlows[i];
-        } else if (data.thoughtFlow && data.agentActive === i) {
+        } else if (data.thoughtFlow && (data.agentActive === i || data.agentActive === null || data.agentActive === undefined)) {
           tf = data.thoughtFlow;
         }
 
@@ -2061,7 +2103,8 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
             actEl.className = `protocol-tag-badge tag-${tf.action || 'IDLE'}`;
             actEl.innerText = tf.action || "IDLE";
           }
-          if (confEl) confEl.innerText = `Conf: ${tf.conf || tf.confidence || '0.90'}`;
+          const confVal = tf.conf ?? tf.confidence ?? '0.90';
+          if (confEl) confEl.innerText = `Conf: ${confVal}`;
         } else {
           if (evEl) evEl.innerText = "Monitoring peer deliberation";
           if (hypEl) hypEl.innerText = "Standby • Ingesting board assertions";
@@ -2078,8 +2121,17 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
       for (let i = 0; i < 3; i++) {
         const node = document.getElementById(`agent${i}Node`);
         const statusText = document.getElementById(`agent${i}Status`);
-        node.className = "agent-node";
-        statusText.innerText = "Idle • Listening";
+        const ag = (scen.agents && scen.agents[i]) || null;
+        if (!ag) {
+          if (node) { node.className = "agent-node"; node.style.opacity = "0.35"; }
+          if (statusText) statusText.innerText = "Offline";
+          continue;
+        }
+        if (node) {
+          node.className = "agent-node";
+          node.style.opacity = "1.0";
+        }
+        if (statusText) statusText.innerText = "Idle • Listening";
       }
 
       // SVG Lines reset
@@ -2118,7 +2170,7 @@ Task: Certify Ultra-Strong Intelligibility level and verify mathematical complia
         deadlockBanner.classList.add("visible");
         bbCore.classList.add("pulse-deadlock");
         if (deadlockBannerText) {
-          deadlockBannerText.innerHTML = `<strong>DEADLOCK DETECTED:</strong> ${data.deadlockMsg || "Circular REJECT loop. Time-travel sandbox required."}`;
+          deadlockBannerText.innerHTML = `<strong>DEADLOCK DETECTED:</strong> ${escapeHTML(data.deadlockMsg || "Circular REJECT loop. Time-travel sandbox required.")}`;
         }
       } else {
         deadlockBanner.classList.remove("visible");
