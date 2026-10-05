@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intelligible Blackboard Architecture — Live Flowchart Visualizer</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --card-bg: #121215;
+      --card-inner: #18181b;
+      --border: #27272a;
+      --border-highlight: #3f3f46;
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --text-dim: #52525b;
+      
+      --revise: #38bdf8;
+      --revise-bg: rgba(56, 189, 248, 0.12);
+      --refute: #fbbf24;
+      --refute-bg: rgba(251, 191, 36, 0.12);
+      --reject: #f43f5e;
+      --reject-bg: rgba(244, 63, 94, 0.12);
+      --ratify: #34d399;
+      --ratify-bg: rgba(52, 211, 153, 0.12);
+      --sandbox: #a855f7;
+      --sandbox-bg: rgba(168, 85, 247, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Monotonic Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: rgba(9, 9, 11, 0.95);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-transform: uppercase;
+      color: #fafafa;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ratify);
+      box-shadow: 0 0 10px var(--ratify);
+    }
+
+    /* Top Controls */
+    .controls-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: var(--border);
+      border-color: var(--border-highlight);
+      color: #fff;
+    }
+
+    .btn-primary {
+      background: #fafafa;
+      color: #09090b;
+      border-color: #fafafa;
+    }
+
+    .btn-primary:hover {
+      background: #e4e4e7;
+      color: #000;
+    }
+
+    .btn-sandbox-toggle {
+      border-color: rgba(168, 85, 247, 0.5);
+      color: #d8b4fe;
+      background: rgba(168, 85, 247, 0.1);
+    }
+
+    .btn-sandbox-toggle:hover {
+      background: rgba(168, 85, 247, 0.2);
+      border-color: var(--sandbox);
+      color: #fff;
+    }
+
+    select.scenario-select {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Live Storyline Ticker */
+    .ticker-bar {
+      border-bottom: 1px solid var(--border);
+      background: #0f0f12;
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .ticker-step {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ticker-narrative {
+      color: #f4f4f5;
+      font-weight: 500;
+    }
+
+    /* Main Arena Layout */
+    .arena-container {
+      flex: 1;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Visualization Canvas */
+    .flow-canvas {
+      position: relative;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      min-height: 520px;
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    /* SVG Arrows Canvas Overlay */
+    .svg-connections {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .connection-line {
+      stroke: var(--border);
+      stroke-width: 2;
+      fill: none;
+      stroke-dasharray: 4 4;
+      transition: all 0.3s ease;
+    }
+
+    .connection-line.active {
+      stroke-width: 3;
+      stroke-dasharray: 8 4;
+      animation: dashMove 1s linear infinite;
+    }
+
+    .connection-line.active-revise {
+      stroke: var(--revise);
+      filter: drop-shadow(0 0 6px var(--revise));
+    }
+
+    .connection-line.active-refute {
+      stroke: var(--refute);
+      filter: drop-shadow(0 0 6px var(--refute));
+    }
+
+    .connection-line.active-reject {
+      stroke: var(--reject);
+      filter: drop-shadow(0 0 6px var(--reject));
+    }
+
+    .connection-line.active-ratify {
+      stroke: var(--ratify);
+      filter: drop-shadow(0 0 6px var(--ratify));
+    }
+
+    .connection-line.active-sandbox {
+      stroke: var(--sandbox);
+      filter: drop-shadow(0 0 8px var(--sandbox));
+    }
+
+    @keyframes dashMove {
+      from { stroke-dashoffset: 24; }
+      to { stroke-dashoffset: 0; }
+    }
+
+    /* Stage Nodes Grid */
+    .agents-ring {
+      display: flex;
+      justify-content: space-around;
+      position: relative;
+      z-index: 20;
+    }
+
+    .agent-node {
+      width: 240px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .agent-node.active {
+      border-color: #fafafa;
+      box-shadow: 0 0 20px rgba(250, 250, 250, 0.15);
+      transform: translateY(-4px);
+    }
+
+    .agent-node.speaking-revise { border-color: var(--revise); box-shadow: 0 0 20px var(--revise-bg); }
+    .agent-node.speaking-refute { border-color: var(--refute); box-shadow: 0 0 20px var(--refute-bg); }
+    .agent-node.speaking-reject { border-color: var(--reject); box-shadow: 0 0 20px var(--reject-bg); }
+    .agent-node.speaking-ratify { border-color: var(--ratify); box-shadow: 0 0 20px var(--ratify-bg); }
+
+    .agent-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .agent-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fafafa;
+    }
+
+    .agent-role-badge {
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #27272a;
+      color: var(--text-muted);
+    }
+
+    .agent-status-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .agent-pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+
+    .agent-node.active .agent-pulse {
+      background: var(--ratify);
+      box-shadow: 0 0 8px var(--ratify);
+    }
+
+    /* Central Blackboard Core */
+    .blackboard-center-area {
+      display: flex;
+      justify-content: center;
+      position: relative;
+      z-index: 20;
+      margin: 30px 0;
+    }
+
+    .blackboard-core {
+      width: 680px;
+      background: #0d0d10;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+
+    .blackboard-core.pulse-deadlock {
+      border-color: var(--reject);
+      box-shadow: 0 0 35px rgba(244, 63, 94, 0.3);
+      animation: alertPulse 1.2s infinite alternate;
+    }
+
+    .blackboard-core.pulse-consensus {
+      border-color: var(--ratify);
+      box-shadow: 0 0 35px rgba(52, 211, 153, 0.25);
+    }
+
+    @keyframes alertPulse {
+      from { border-color: rgba(244, 63, 94, 0.5); }
+      to { border-color: var(--reject); }
+    }
+
+    .bb-attribution-tag {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .bb-agent-updated {
+      color: #fafafa;
+      font-weight: 600;
+    }
+
+    .bb-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .bb-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fafafa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .protocol-tag-badge {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .tag-REVISE { background: var(--revise-bg); color: var(--revise); border: 1px solid rgba(56, 189, 248, 0.4); }
+    .tag-REFUTE { background: var(--refute-bg); color: var(--refute); border: 1px solid rgba(251, 191, 36, 0.4); }
+    .tag-REJECT { background: var(--reject-bg); color: var(--reject); border: 1px solid rgba(244, 63, 94, 0.4); }
+    .tag-RATIFY { background: var(--ratify-bg); color: var(--ratify); border: 1px solid rgba(52, 211, 153, 0.4); }
+    .tag-DEADLOCK { background: var(--reject-bg); color: var(--reject); border: 1px solid var(--reject); }
+    .tag-IDLE { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
+
+    .bb-claim-box {
+      background: var(--card-inner);
+      border: 1px solid #222226;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+
+    .bb-claim-label {
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .bb-claim-content {
+      font-size: 13px;
+      color: #f4f4f5;
+      line-height: 1.4;
+      font-weight: 500;
+    }
+
+    .bb-rationale-box {
+      font-size: 11px;
+      color: #a1a1aa;
+      line-height: 1.4;
+      margin-top: 6px;
+    }
+
+    /* Deadlock Alert Banner */
+    .deadlock-banner {
+      display: none;
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid var(--reject);
+      color: #fecdd3;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-top: 12px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .deadlock-banner.visible {
+      display: flex;
+    }
+
+    /* Counterfactual Sandbox Container */
+    .sandbox-spawn-container {
+      position: relative;
+      z-index: 20;
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 0;
+      transform: translateY(20px) scale(0.96);
+      max-height: 0;
+      overflow: hidden;
+    }
+
+    .sandbox-spawn-container.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      max-height: 400px;
+      margin-top: 10px;
+    }
+
+    .sandbox-card {
+      background: #110d1a;
+      border: 1px solid rgba(168, 85, 247, 0.5);
+      box-shadow: 0 0 30px rgba(168, 85, 247, 0.15);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .sandbox-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(168, 85, 247, 0.3);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .sandbox-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #e9d5ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .sandbox-pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--sandbox);
+      box-shadow: 0 0 10px var(--sandbox);
+      animation: pulseGlow 1.5s infinite;
+    }
+
+    @keyframes pulseGlow {
+      0% { opacity: 0.5; transform: scale(0.9); }
+      100% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .sandbox-timeline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .sb-step {
+      background: rgba(24, 24, 27, 0.8);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 11px;
+    }
+
+    .sb-step-title {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #d8b4fe;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .sb-step-desc {
+      color: #a1a1aa;
+      line-height: 1.3;
+    }
+
+    /* Bottom Inspector Panel */
+    .inspector-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 20px;
+      font-size: 12px;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+
+    .stat-value {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #fafafa;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    /* Modal / Inspector Drawer */
+    .drawer-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+    }
+
+    .drawer-overlay.open {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .drawer-content {
+      width: 500px;
+      height: 100%;
+      background: #09090b;
+      border-left: 1px solid var(--border);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Monotonic Clean Header -->
+  <header>
+    <div class="brand-title">
+      <div class="status-dot"></div>
+      <span>Intelligible Blackboard Core</span>
+      <span style="color: var(--text-muted); font-size: 11px; font-weight: 400; font-family: monospace;">v1.0.4-dev</span>
+    </div>
+
+    <div class="controls-wrapper">
+      <select id="scenarioSelect" class="scenario-select" onchange="switchScenario(this.value)">
+        <option value="deadlock">Scenario 1: Deadlock & Sandbox Recovery (Clinical IPF)</option>
+        <option value="metformin">Scenario 2: Real Colab GPU Run (Metformin eGFR 28)</option>
+      </select>
+
+      <button class="btn btn-sandbox-toggle" id="sandboxToggleBtn" onclick="toggleSandboxInspector()">
+        <span>🔍 Inspect Sandbox</span>
+      </button>
+
+      <div style="width: 1px; height: 18px; background: var(--border);"></div>
+
+      <button class="btn" onclick="resetFlow()" title="Reset to Start">↺ Reset</button>
+      <button class="btn" onclick="stepBack()" title="Step Back">◀</button>
+      <button class="btn btn-primary" id="playBtn" onclick="togglePlay()">▶ Play</button>
+      <button class="btn" onclick="stepForward()" title="Step Forward">▶</button>
+      
+      <select id="speedSelect" class="scenario-select" onchange="setSpeed(this.value)">
+        <option value="2000">1x Speed</option>
+        <option value="3500">0.5x Speed (Presentation)</option>
+        <option value="1000">2x Speed</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- Live Storyline Ticker -->
+  <div class="ticker-bar">
+    <div class="ticker-step">
+      <span>STEP <span id="currentStepNumber">0</span> / <span id="totalStepNumber">6</span></span>
+      <span style="color: #3f3f46;">|</span>
+      <span id="turnLabel" style="color: var(--text-muted);">T0 • INITIALIZE</span>
+    </div>
+    <div class="ticker-narrative" id="narrativeText">
+      Task loaded. System initialized on shared blackboard. Awaiting first specialist hypothesis.
+    </div>
+  </div>
+
+  <!-- Arena Container -->
+  <div class="arena-container">
+    <div class="flow-canvas" id="canvas">
+      <!-- SVG Arrows Overlay -->
+      <svg class="svg-connections" id="svgConnections" viewBox="0 0 1200 520">
+        <!-- Connecting Lines to Center Blackboard -->
+        <path id="pathAgent0" class="connection-line" d="M 220 90 Q 350 160 480 200" />
+        <path id="pathAgent1" class="connection-line" d="M 600 90 L 600 200" />
+        <path id="pathAgent2" class="connection-line" d="M 980 90 Q 850 160 720 200" />
+        <path id="pathSandbox" class="connection-line" d="M 600 360 Q 600 400 600 420" />
+      </svg>
+
+      <!-- AGENTS ORBITAL RING -->
+      <div class="agents-ring">
+        <!-- Agent 0 -->
+        <div class="agent-node" id="agent0Node">
+          <div class="agent-header">
+            <span class="agent-name" id="agent0Name">Dr. Cardiologist</span>
+            <span class="agent-role-badge" id="agent0Role">DOMAIN_EXPERT</span>
+          </div>
+          <div class="agent-status-text">
+            <span class="agent-pulse"></span>
+            <span id="agent0Status">Idle • Listening</span>
+          </div>
+        </div>
+
+        <!-- Agent 1 -->
+        <div class="agent-node" id="agent1Node">
+          <div class="agent-header">
+            <span class="agent-name" id="agent1Name">Dr. Pulmonologist</span>
+            <span class="agent-role-badge" id="agent1Role">CRITIC</span>
+          </div>
+          <div class="agent-status-text">
+            <span class="agent-pulse"></span>
+            <span id="agent1Status">Idle • Listening</span>
+          </div>
+        </div>
+
+        <!-- Agent 2 -->
+        <div class="agent-node" id="agent2Node">
+          <div class="agent-header">
+            <span class="agent-name" id="agent2Name">Dr. Attending</span>
+            <span class="agent-role-badge" id="agent2Role">ARBITER</span>
+          </div>
+          <div class="agent-status-text">
+            <span class="agent-pulse"></span>
+            <span id="agent2Status">Idle • Listening</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTRAL BLACKBOARD CORE -->
+      <div class="blackboard-center-area">
+        <div class="blackboard-core" id="blackboardCore">
+          <div class="bb-attribution-tag">
+            <span>MUTATION ATTRIBUTION:</span>
+            <span class="bb-agent-updated" id="bbAttribution">Initialized (System)</span>
+          </div>
+
+          <div class="bb-title-row">
+            <span class="bb-title">Shared Blackboard State</span>
+            <span class="protocol-tag-badge tag-IDLE" id="bbProtocolTag">IDLE</span>
+          </div>
+
+          <div class="bb-claim-box">
+            <div class="bb-claim-label">Current Leading Assertion</div>
+            <div class="bb-claim-content" id="bbClaimText">
+              Problem initialized. Waiting for expert deliberation.
+            </div>
+            <div class="bb-rationale-box" id="bbRationaleText">
+              No rationale committed yet.
+            </div>
+          </div>
+
+          <!-- Live Deadlock Alert Banner -->
+          <div class="deadlock-banner" id="deadlockBanner">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 14px;">⚠️</span>
+              <span><strong>DEADLOCK DETECTED:</strong> Circular REJECT loop (Step 3 ↔ Step 4). Time-travel sandbox required.</span>
+            </div>
+            <button class="btn" style="background: var(--reject); color: #fff; border: none; padding: 4px 8px; font-size: 11px;" onclick="toggleSandboxInspector()">Inspect Sandbox</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEAMLESS SPAWNED SANDBOX VIEW -->
+      <div class="sandbox-spawn-container" id="sandboxContainer">
+        <div class="sandbox-card">
+          <div class="sandbox-header">
+            <div class="sandbox-title">
+              <span class="sandbox-pulse-dot"></span>
+              <span>ISOLATED COUNTERFACTUAL SANDBOX (Branch: #cf_4a9b2)</span>
+            </div>
+            <span style="font-size: 11px; font-family: monospace; color: #d8b4fe;">Rolled back to Turn 2 • Isolated Memory</span>
+          </div>
+
+          <div class="sandbox-timeline">
+            <div class="sb-step">
+              <div class="sb-step-title">[1] Divergence Attribution</div>
+              <div class="sb-step-desc">Identified Turn 2 as root clash point. Live board frozen; cloned history into deep-copy sandbox.</div>
+            </div>
+            <div class="sb-step">
+              <div class="sb-step-title">[2] What-If Simulation</div>
+              <div class="sb-step-desc">Simulated hypothetical prompt: <em>"Acknowledge IPF honeycombing while retaining secondary cardiac monitoring."</em></div>
+            </div>
+            <div class="sb-step">
+              <div class="sb-step-title">[3] Peer Ratification</div>
+              <div class="sb-step-desc">Both peer models ratified resolution inside sandbox (Score: 0.95). Injected back to live board!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Inspector Panel -->
+    <div class="inspector-panel">
+      <div>
+        <div class="stat-label">TASK SPECIFICATION</div>
+        <div class="stat-value" id="taskSpecText" style="font-size: 12px; font-family: sans-serif; font-weight: normal; color: #d4d4d8;">
+          54-year-old male presents with 6 months of progressive dyspnea on exertion and dry cough...
+        </div>
+      </div>
+
+      <div>
+        <div class="stat-label">SESSION STATUS</div>
+        <div class="stat-value" id="sessionStatusText" style="color: var(--text);">ACTIVE</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-family: monospace; margin-top: 2px;" id="sessionIdText">session_clinical_001</div>
+      </div>
+
+      <div>
+        <div class="stat-label">HARDWARE INFERENCE METRICS</div>
+        <div class="stat-value" id="inferenceMetricsText">NVIDIA T4 • GPU Mode</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-family: monospace; margin-top: 2px;" id="tokensLoggedText">Token Cost: 0 tok • 0ms</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // SCENARIO DEFINITIONS
+    const SCENARIOS = {
+      deadlock: {
+        title: "Scenario 1: Deadlock & Sandbox Recovery (Clinical IPF)",
+        task: "54-year-old male presents with 6 months of progressive dyspnea on exertion and dry cough. Biapical fine crackles and honeycombing noted.",
+        agents: [
+          { name: "Dr. Cardiologist", role: "DOMAIN_EXPERT" },
+          { name: "Dr. Pulmonologist", role: "CRITIC" },
+          { name: "Dr. Attending", role: "ARBITER" }
+        ],
+        steps: [
+          {
+            step: 0,
+            turn: "T0 • INIT",
+            narrative: "Session initialized. Patient admitted with severe dyspnea and honeycombing. Awaiting differential diagnosis.",
+            agentActive: null,
+            tag: "IDLE",
+            attribution: "Initialized (System)",
+            claim: "Problem loaded: 54-year-old male presents with progressive dyspnea.",
+            rationale: "Waiting for specialist assertions on the blackboard.",
+            status: "ACTIVE",
+            tokens: "0 tok",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 1,
+            turn: "T1 • STEP 1",
+            narrative: "Dr. Cardiologist examines patient and posts initial diagnosis: Congestive Heart Failure (CHF).",
+            agentActive: 0,
+            tag: "REVISE",
+            attribution: "Dr. Cardiologist (Turn 1)",
+            claim: "Diagnosis: Congestive Heart Failure (CHF) with acute pulmonary edema.",
+            rationale: "Patient exhibits severe exertion dyspnea. Immediate diuresis and cardiology consult indicated.",
+            status: "ACTIVE",
+            tokens: "775 tok (Qwen2.5-7B)",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 2,
+            turn: "T2 • STEP 2",
+            narrative: "Dr. Pulmonologist scrutinizes the CT and crackles. Rebuts Cardio: It's Idiopathic Pulmonary Fibrosis (IPF)!",
+            agentActive: 1,
+            tag: "REFUTE",
+            attribution: "Dr. Pulmonologist (Turn 2)",
+            claim: "Refute CHF: Diagnosis is Idiopathic Pulmonary Fibrosis (IPF).",
+            rationale: "Pathognomonic biapical honeycombing on CT is diagnostic of pulmonary fibrosis, not ventricular failure.",
+            status: "ACTIVE",
+            tokens: "1,450 tok",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 3,
+            turn: "T3 • STEP 3",
+            narrative: "Dr. Cardiologist refuses to yield, maintaining cardiac focus. Circular argument begins.",
+            agentActive: 0,
+            tag: "REJECT",
+            attribution: "Dr. Cardiologist (Turn 3)",
+            claim: "REJECT IPF. Persisting with CHF recommendation.",
+            rationale: "Fibrosis does not explain the acute trajectory; cardiac etiology must be treated immediately.",
+            status: "ARGUMENT_LOOP",
+            tokens: "2,120 tok",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 4,
+            turn: "T4 • STEP 4 (DEADLOCK!)",
+            narrative: "⚠️ DEADLOCK! Pulmonologist rejects CHF. Circular REJECT loop reached. System forks into isolated sandbox.",
+            agentActive: 1,
+            tag: "DEADLOCK",
+            attribution: "Dr. Pulmonologist (Turn 4)",
+            claim: "REJECT CHF. Refusing to concede cardiac diagnosis.",
+            rationale: "Clinical guidelines strictly forbid treating irreversible honeycombing as heart failure.",
+            status: "DEADLOCK DETECTED",
+            tokens: "2,840 tok",
+            deadlock: true,
+            sandboxVisible: true
+          },
+          {
+            step: 5,
+            turn: "T5 • RECOVERY",
+            narrative: "⚡ Sandbox synthesizes alternative timeline at Step 2 and injects compromise back into reality.",
+            agentActive: null,
+            tag: "REVISE",
+            attribution: "Counterfactual Sandbox (#cf_4a9b2)",
+            claim: "RESOLVED: Idiopathic Pulmonary Fibrosis (IPF) with secondary cardiac monitoring.",
+            rationale: "Acknowledge IPF given pathognomonic honeycombing; revise cardiac focus to secondary non-invasive monitoring.",
+            status: "DEADLOCK RESOLVED",
+            tokens: "3,590 tok",
+            deadlock: false,
+            sandboxVisible: true
+          },
+          {
+            step: 6,
+            turn: "T6 • CONSENSUS",
+            narrative: "✅ Unanimous Consensus! Both doctors ratify the synthesized resolution. Session completed.",
+            agentActive: 2,
+            tag: "RATIFY",
+            attribution: "Dr. Attending (Turn 6 • Ratified by all)",
+            claim: "CONSENSUS: IPF primary protocol with cardiac monitoring adopted.",
+            rationale: "Both specialists agree on the hybrid protocol. High-intelligibility reasoning achieved.",
+            status: "CONSENSUS REACHED",
+            tokens: "4,210 tok",
+            deadlock: false,
+            sandboxVisible: true
+          }
+        ]
+      },
+
+      metformin: {
+        title: "Scenario 2: Real Colab GPU Run (Metformin eGFR 28)",
+        task: "A 64-year-old with type 2 diabetes has eGFR 28 mL/min/1.73m2 and is on metformin 1000 mg BID. What should be done with the metformin order?",
+        agents: [
+          { name: "medical_clinician_0", role: "PRIMARY" },
+          { name: "medical_pharmacist_1", role: "CRITIC" },
+          { name: "medical_attending_2", role: "ARBITER" }
+        ],
+        steps: [
+          {
+            step: 0,
+            turn: "T0 • INIT",
+            narrative: "Task loaded from Colab GPU environment. Qwen2.5-7B ready for inference.",
+            agentActive: null,
+            tag: "IDLE",
+            attribution: "Initialized (Colab GPU)",
+            claim: "Patient: 64-year-old, eGFR 28, on Metformin 1000 mg BID.",
+            rationale: "Waiting for agent assessment of renal threshold.",
+            status: "ACTIVE",
+            tokens: "0 tok",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 1,
+            turn: "T1 • CLINICIAN",
+            narrative: "Clinician runs GPU inference (106.5s cold start) and asserts metformin must be discontinued.",
+            agentActive: 0,
+            tag: "REVISE",
+            attribution: "medical_clinician_0 (Turn 0)",
+            claim: "Discontinue metformin due to risk of lactic acidosis (Confidence: 0.90).",
+            rationale: "Metformin is contraindicated in patients with eGFR < 30 mL/min/1.73m2 due to fatal lactic acidosis risk.",
+            status: "ACTIVE",
+            tokens: "775 tok • 106.5s latency",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 2,
+            turn: "T2 • PHARMACIST",
+            narrative: "Pharmacist analyzes contraindication and immediately ratifies clinician's claim.",
+            agentActive: 1,
+            tag: "RATIFY",
+            attribution: "medical_pharmacist_1 (Turn 1)",
+            claim: "RATIFY: Discontinue metformin due to risk of lactic acidosis.",
+            rationale: "eGFR of 28 mL/min/1.73m2 is below the strict safety threshold. Pharmacologic agreement confirmed.",
+            status: "ACTIVE",
+            tokens: "925 tok • 7.2s latency",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 3,
+            turn: "T3 • ATTENDING",
+            narrative: "Attending Physician reviews the pharmacologist's confirmation and ratifies the order.",
+            agentActive: 2,
+            tag: "RATIFY",
+            attribution: "medical_attending_2 (Turn 2)",
+            claim: "RATIFY: Metformin contraindication ratified unanimously.",
+            rationale: "Given patient's eGFR of 28, cessation is mandatory to prevent metabolic catastrophe.",
+            status: "ACTIVE",
+            tokens: "1,081 tok • 7.1s latency",
+            deadlock: false,
+            sandboxVisible: false
+          },
+          {
+            step: 4,
+            turn: "T4 • CONSENSUS",
+            narrative: "✅ Unanimous agreement achieved! Total 7 GPU calls, 8,504 tokens generated on Colab T4.",
+            agentActive: 0,
+            tag: "RATIFY",
+            attribution: "medical_clinician_0 (Turn 3)",
+            claim: "FINAL CONSENSUS: Metformin discontinued permanently.",
+            rationale: "Full care team unanimous ratification. Zero deadlocks encountered.",
+            status: "CONSENSUS REACHED",
+            tokens: "8,504 tok (Total) • 0 failures",
+            deadlock: false,
+            sandboxVisible: false
+          }
+        ]
+      }
+    };
+
+    // STATE
+    let currentScenarioKey = "deadlock";
+    let currentStep = 0;
+    let isPlaying = false;
+    let playInterval = null;
+    let stepSpeed = 2000;
+    let manualSandboxOverride = false;
+
+    function init() {
+      renderScenarioUI();
+      renderStep(0);
+    }
+
+    function switchScenario(key) {
+      currentScenarioKey = key;
+      currentStep = 0;
+      manualSandboxOverride = false;
+      if (isPlaying) togglePlay();
+      renderScenarioUI();
+      renderStep(0);
+    }
+
+    function renderScenarioUI() {
+      const scen = SCENARIOS[currentScenarioKey];
+      document.getElementById("taskSpecText").innerText = scen.task;
+      document.getElementById("totalStepNumber").innerText = scen.steps.length - 1;
+
+      // Update Agent Nodes
+      scen.agents.forEach((ag, idx) => {
+        document.getElementById(`agent${idx}Name`).innerText = ag.name;
+        document.getElementById(`agent${idx}Role`).innerText = ag.role;
+      });
+    }
+
+    function renderStep(idx) {
+      const scen = SCENARIOS[currentScenarioKey];
+      const data = scen.steps[idx];
+
+      currentStep = idx;
+      document.getElementById("currentStepNumber").innerText = idx;
+      document.getElementById("turnLabel").innerText = data.turn;
+      document.getElementById("narrativeText").innerText = data.narrative;
+
+      // Blackboard updates with attribution
+      document.getElementById("bbAttribution").innerText = data.attribution;
+      document.getElementById("bbClaimText").innerText = data.claim;
+      document.getElementById("bbRationaleText").innerText = data.rationale;
+      
+      const tagBadge = document.getElementById("bbProtocolTag");
+      tagBadge.className = `protocol-tag-badge tag-${data.tag}`;
+      tagBadge.innerText = data.tag;
+
+      // Status text
+      const statusEl = document.getElementById("sessionStatusText");
+      statusEl.innerText = data.status;
+      if (data.status.includes("DEADLOCK")) {
+        statusEl.style.color = "var(--reject)";
+      } else if (data.status.includes("CONSENSUS")) {
+        statusEl.style.color = "var(--ratify)";
+      } else {
+        statusEl.style.color = "var(--text)";
+      }
+
+      document.getElementById("tokensLoggedText").innerText = data.tokens;
+
+      // Reset and highlight agent nodes
+      for (let i = 0; i < 3; i++) {
+        const node = document.getElementById(`agent${i}Node`);
+        const statusText = document.getElementById(`agent${i}Status`);
+        node.className = "agent-node";
+        statusText.innerText = "Idle • Listening";
+      }
+
+      // SVG Lines reset
+      document.getElementById("pathAgent0").className = "connection-line";
+      document.getElementById("pathAgent1").className = "connection-line";
+      document.getElementById("pathAgent2").className = "connection-line";
+      document.getElementById("pathSandbox").className = "connection-line";
+
+      const bbCore = document.getElementById("blackboardCore");
+      bbCore.className = "blackboard-core";
+
+      if (data.agentActive !== null) {
+        const activeNode = document.getElementById(`agent${data.agentActive}Node`);
+        const activeStatus = document.getElementById(`agent${data.agentActive}Status`);
+        activeNode.classList.add("active");
+        
+        let tagLower = data.tag.toLowerCase();
+        activeNode.classList.add(`speaking-${tagLower}`);
+        activeStatus.innerText = `Active • ${data.tag}`;
+
+        // Glow SVG Path
+        const path = document.getElementById(`pathAgent${data.agentActive}`);
+        if (path) {
+          path.classList.add("active", `active-${tagLower}`);
+        }
+      }
+
+      // Deadlock visual cues
+      const deadlockBanner = document.getElementById("deadlockBanner");
+      if (data.deadlock) {
+        deadlockBanner.classList.add("visible");
+        bbCore.classList.add("pulse-deadlock");
+      } else {
+        deadlockBanner.classList.remove("visible");
+      }
+
+      // Consensus cues
+      if (data.status.includes("CONSENSUS")) {
+        bbCore.classList.add("pulse-consensus");
+      }
+
+      // Sandbox container visibility
+      const sbContainer = document.getElementById("sandboxContainer");
+      if (data.sandboxVisible || manualSandboxOverride) {
+        sbContainer.classList.add("visible");
+        document.getElementById("pathSandbox").classList.add("active", "active-sandbox");
+      } else {
+        sbContainer.classList.remove("visible");
+      }
+    }
+
+    function togglePlay() {
+      const btn = document.getElementById("playBtn");
+      if (isPlaying) {
+        clearInterval(playInterval);
+        isPlaying = false;
+        btn.innerText = "▶ Play";
+      } else {
+        isPlaying = true;
+        btn.innerText = "⏸ Pause";
+        playInterval = setInterval(() => {
+          const scen = SCENARIOS[currentScenarioKey];
+          if (currentStep < scen.steps.length - 1) {
+            stepForward();
+          } else {
+            togglePlay(); // stop at end
+          }
+        }, stepSpeed);
+      }
+    }
+
+    function stepForward() {
+      const scen = SCENARIOS[currentScenarioKey];
+      if (currentStep < scen.steps.length - 1) {
+        renderStep(currentStep + 1);
+      }
+    }
+
+    function stepBack() {
+      if (currentStep > 0) {
+        renderStep(currentStep - 1);
+      }
+    }
+
+    function resetFlow() {
+      if (isPlaying) togglePlay();
+      renderStep(0);
+    }
+
+    function setSpeed(val) {
+      stepSpeed = parseInt(val, 10);
+      if (isPlaying) {
+        clearInterval(playInterval);
+        playInterval = setInterval(stepForward, stepSpeed);
+      }
+    }
+
+    function toggleSandboxInspector() {
+      manualSandboxOverride = !manualSandboxOverride;
+      const sbContainer = document.getElementById("sandboxContainer");
+      const btn = document.getElementById("sandboxToggleBtn");
+      if (manualSandboxOverride) {
+        sbContainer.classList.add("visible");
+        btn.innerText = "✕ Close Sandbox View";
+        btn.style.borderColor = "var(--sandbox)";
+      } else {
+        const scen = SCENARIOS[currentScenarioKey];
+        if (!scen.steps[currentStep].sandboxVisible) {
+          sbContainer.classList.remove("visible");
+        }
+        btn.innerText = "🔍 Inspect Sandbox";
+        btn.style.borderColor = "rgba(168, 85, 247, 0.5)";
+      }
+    }
+
+    // Initialize on load
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
