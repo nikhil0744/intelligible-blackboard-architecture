@@ -10,7 +10,7 @@ Tagging a call:
 - or implicitly, for every call made inside `with usage_scope(trial_id=..., phase=...)`.
 
 Phases: "deliberation" (ordinary turns, the default), "baseline_replay",
-"candidate_replay", "tool", "evaluator". Repairs keep the phase of the call they
+"candidate_replay", "independent_verification", "tool", "evaluator". Repairs keep the phase of the call they
 repair and set `is_repair`.
 """
 
@@ -25,7 +25,7 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 from .types import CallRecord, UsageSummary
 
-PHASES = ("deliberation", "baseline_replay", "candidate_replay", "tool", "evaluator")
+PHASES = ("deliberation", "baseline_replay", "candidate_replay", "independent_verification", "tool", "evaluator")
 DEFAULT_PHASE = "deliberation"
 
 _scope: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar("llm_usage_scope", default={})
@@ -69,8 +69,12 @@ class UsageLedger:
         if path is not None:
             self.attach_file(path)
 
-    def attach_file(self, path: Union[str, Path]) -> None:
+    def attach_file(self, path: Optional[Union[str, Path]]) -> None:
         """Append every later record to `path` as it happens, so an interrupted run keeps its ledger."""
+        if path is None:
+            with self._lock:
+                self._path = None
+            return
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
@@ -82,6 +86,7 @@ class UsageLedger:
             if self._path is not None:
                 with self._path.open("a", encoding="utf-8") as f:
                     f.write(record.model_dump_json() + "\n")
+                    f.flush()
 
     def records(
         self,

@@ -1,0 +1,7 @@
+{
+  "bat_ball": "0.05",
+  "machines": 5,
+  "fault_tolerance": 2,
+  "logic": false,
+  "temperature": 10
+}

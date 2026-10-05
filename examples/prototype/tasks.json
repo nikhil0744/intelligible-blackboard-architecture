@@ -1,0 +1,27 @@
+[
+  {
+    "task_id": "bat_ball",
+    "question": "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. What is the price of the ball in dollars? Put only the decimal number, without a currency symbol or units, in prediction.claim.",
+    "context": {"answer_format": "decimal number in dollars"}
+  },
+  {
+    "task_id": "machines",
+    "question": "Five identical machines take five minutes to make five widgets. Each machine works independently at a constant rate. How many minutes do 100 machines take to make 100 widgets? Put only the integer number of minutes in prediction.claim.",
+    "context": {"answer_format": "integer"}
+  },
+  {
+    "task_id": "fault_tolerance",
+    "question": "A Byzantine fault-tolerant system requires n >= 3f + 1 nodes to tolerate f faulty nodes. With 7 nodes, what is the largest integer f it can tolerate? Put only the integer in prediction.claim.",
+    "context": {"answer_format": "integer"}
+  },
+  {
+    "task_id": "logic",
+    "question": "All glips are blons. Some blons are trels. Does it necessarily follow that some glips are trels? Put only true or false in prediction.claim.",
+    "context": {"answer_format": "true or false"}
+  },
+  {
+    "task_id": "temperature",
+    "question": "Two equal-weight temperature readings are 32 degrees Fahrenheit and 20 degrees Celsius. Convert to Celsius before averaging. What is the mean in Celsius? Put only the integer number in prediction.claim.",
+    "context": {"answer_format": "integer", "conversion": "C = (F - 32) * 5 / 9"}
+  }
+]

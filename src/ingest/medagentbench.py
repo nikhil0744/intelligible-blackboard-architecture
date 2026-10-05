@@ -143,7 +143,7 @@ class MedAgentBenchTask(BenchmarkTask):
         default_factory=dict,
         description="Structured EHR context: vitals, lab reports, demographics, imaging notes."
     )
-    sol: Optional[Union[str, List[str]]] = Field(
+    sol: Optional[Union[str, List[str], bool, int, float]] = Field(
         default=None,
         description="Raw benchmark reference solution or solution list."
     )
@@ -214,7 +214,8 @@ class MedAgentBenchTask(BenchmarkTask):
             d["patient_id"] = str(d["eval_mrn"]).strip()
 
         # 5. Normalize ground_truth and sol
-        sol_raw = d.get("sol") or d.get("solution") or d.get("ground_truth") or d.get("target_diagnosis") or d.get("reference_answer")
+        sol_raw = next((d[k] for k in ("sol", "solution", "ground_truth", "target_diagnosis", "reference_answer")
+                        if k in d and d[k] is not None), None)
         d["sol"] = sol_raw
         if sol_raw is not None:
             if isinstance(sol_raw, list):

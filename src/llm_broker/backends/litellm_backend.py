@@ -31,7 +31,7 @@ class LiteLLMBackend:
             messages=[m.model_dump() for m in request.messages],
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            timeout=self.timeout_s,
+            timeout=min(self.timeout_s, request.timeout_s) if request.timeout_s else self.timeout_s,
         )
         if self.api_base:
             kwargs["api_base"] = self.api_base

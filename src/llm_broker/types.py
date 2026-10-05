@@ -21,6 +21,7 @@ class LLMRequest(BaseModel):
     temperature: float = 0.3
     max_tokens: int = 1024
     seed: Optional[int] = None
+    timeout_s: Optional[float] = Field(default=None, gt=0, description="Optional request deadline override.")
     json_schema: Optional[Dict[str, Any]] = None
     agent_id: Optional[str] = Field(default=None, description="For per-agent usage accounting.")
     metadata: Dict[str, Any] = Field(
@@ -106,6 +107,7 @@ class UsageSummary(BaseModel):
     repairs: int = 0
     backend_attempts: int = 0
     unknown_usage_calls: int = 0
+    unreported_retry_attempts: int = 0
     known_prompt_tokens: int = 0
     known_completion_tokens: int = 0
     total_latency_ms: float = 0.0
@@ -117,7 +119,7 @@ class UsageSummary(BaseModel):
     @property
     def total_tokens(self) -> Optional[int]:
         """Exact total, or None when any call's usage is unknown (unknown is not zero)."""
-        return None if self.unknown_usage_calls else self.known_total_tokens
+        return None if self.unknown_usage_calls or self.unreported_retry_attempts else self.known_total_tokens
 
     @classmethod
     def from_records(cls, records: List["CallRecord"]) -> "UsageSummary":
@@ -127,6 +129,10 @@ class UsageSummary(BaseModel):
             s.failures += 0 if r.ok else 1
             s.repairs += 1 if r.is_repair else 0
             s.backend_attempts += r.attempts
+            # A successful retry reports only its own tokens. Earlier failed attempts
+            # may have consumed tokens on the server but returned no usage.
+            if r.ok:
+                s.unreported_retry_attempts += max(0, r.attempts - 1)
             s.total_latency_ms += r.latency_ms
             if r.usage_known:
                 s.known_prompt_tokens += r.prompt_tokens or 0

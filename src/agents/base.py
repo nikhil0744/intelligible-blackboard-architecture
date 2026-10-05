@@ -120,6 +120,7 @@ class PEXAgent:
         counterfactual_capable: bool = False,
         context_tokens: Optional[int] = 8192,
         prompt_margin_tokens: int = 64,
+        reasoning_first: bool = False,
     ):
         self.agent_id = agent_id
         self.persona = get_persona(persona) if isinstance(persona, str) else persona
@@ -131,6 +132,7 @@ class PEXAgent:
         self.max_history = max_history
         self.seed = seed
         self.use_json_schema = use_json_schema
+        self.reasoning_first = reasoning_first
         self.counterfactual_capable = counterfactual_capable
         # Must equal the backend's context window (LLM_NUM_CTX). None disables the prompt budget.
         self.context_tokens = context_tokens
@@ -159,6 +161,7 @@ class PEXAgent:
             "prompt_token_budget": self.prompt_token_budget,
             "seed": self.seed,
             "use_json_schema": self.use_json_schema,
+            "reasoning_first": self.reasoning_first,
         }
 
     @property
@@ -216,7 +219,7 @@ class PEXAgent:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 seed=self.seed,
-                json_schema=decision_json_schema() if self.use_json_schema else None,
+                json_schema=decision_json_schema(reasoning_first=self.reasoning_first) if self.use_json_schema else None,
                 agent_id=self.agent_id,
                 # ledger tags; trial_id / phase come from the caller's usage_scope
                 metadata={
@@ -242,7 +245,7 @@ class PEXAgent:
             latency += resp.latency_ms
             raw.append(resp.text)
             try:
-                decision, normalizations = validate_decision(parse_decision(resp.text), snapshot)
+                decision, normalizations = self.validate_output(parse_decision(resp.text), snapshot)
                 return Formulation(decision, tokens, latency, attempt, budget, raw, reasons, normalizations)
             except DecisionParseError as e:
                 code = e.code if isinstance(e, DecisionSemanticError) else "invalid_json"
@@ -264,9 +267,13 @@ class PEXAgent:
         )
 
     # ---- 3. select tag ---------------------------------------------------------
+    def validate_output(self, decision: AgentDecision, snapshot: BlackboardSnapshot):
+        """Validation hook for runners with additional output requirements."""
+        return validate_decision(decision, snapshot)
+
     def select_tag(self, decision: AgentDecision, snapshot: BlackboardSnapshot) -> AgentDecision:
         """Validate a decision against the board (raises DecisionSemanticError). Kept for callers of the old API."""
-        return validate_decision(decision, snapshot)[0]
+        return self.validate_output(decision, snapshot)[0]
 
     # ---- build contract object -------------------------------------------------
     def to_contribution(

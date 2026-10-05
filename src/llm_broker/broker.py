@@ -21,11 +21,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 from .backends.base import LLMBackend
 from .ledger import DEFAULT_PHASE, UsageLedger, current_scope
 from .types import CallRecord, LLMError, LLMRequest, LLMResponse, UsageStats, UsageSummary
+from .budget import BudgetExceeded, current_budget
 
 
 class ModelBroker:
@@ -38,6 +39,7 @@ class ModelBroker:
         backoff_s: float = 0.5,
         max_workers: Optional[int] = None,
         ledger: Optional[UsageLedger] = None,
+        response_hook: Optional[Callable[[LLMRequest, LLMResponse], None]] = None,
     ):
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
@@ -50,7 +52,8 @@ class ModelBroker:
         self._max_workers = max_workers or max(4, max_concurrency * 2)
         self._pool: Optional[ThreadPoolExecutor] = None
         self._pool_lock = threading.Lock()
-        self.ledger = ledger or UsageLedger()
+        self.ledger = ledger if ledger is not None else UsageLedger()
+        self.response_hook = response_hook
         self.settings = None  # InferenceSettings when built by llm_broker.config
         self._stats_lock = threading.Lock()
         self._total = UsageStats()
@@ -63,20 +66,47 @@ class ModelBroker:
         started_at = datetime.now(timezone.utc)
         t0 = time.perf_counter()
         last_err: Optional[Exception] = None
-        for attempt in range(1, self.max_retries + 2):
-            with self._slots:
-                try:
-                    resp = self.backend.complete(request, model)
-                    resp.attempts = attempt
-                    self._record(request.agent_id, resp)
-                    self._log_call(request, model, started_at, attempt, (time.perf_counter() - t0) * 1000, resp=resp)
-                    return resp
-                except LLMError as e:
-                    last_err = e
-            if attempt <= self.max_retries:
-                time.sleep(self.backoff_s * (2 ** (attempt - 1)))
+        attempts = 0
+        logged = False
+        budget = current_budget()
+        try:
+            for attempt in range(1, self.max_retries + 2):
+                with self._slots:
+                    effective_request = request
+                    if budget is not None:
+                        remaining = budget.take()
+                        effective_request = request.model_copy(update={
+                            "timeout_s": min(request.timeout_s or remaining, remaining),
+                        })
+                    attempts = attempt
+                    try:
+                        resp = self.backend.complete(effective_request, model)
+                    except BudgetExceeded:
+                        raise
+                    except LLMError as e:
+                        last_err = e
+                    else:
+                        resp.attempts = attempt
+                        self._record(request.agent_id, resp)
+                        self._log_call(request, model, started_at, attempt, (time.perf_counter() - t0) * 1000, resp=resp)
+                        logged = True
+                        if self.response_hook is not None:
+                            self.response_hook(request, resp)
+                        return resp
+                if attempt <= self.max_retries:
+                    delay = self.backoff_s * (2 ** (attempt - 1))
+                    if budget is not None:
+                        budget.check()
+                        if delay >= budget.remaining():
+                            raise BudgetExceeded("time_limit")
+                    time.sleep(delay)
+        except BaseException as e:
+            self._record_failure(request.agent_id)
+            # Interrupted calls have unknown usage. Denied calls consume zero backend attempts.
+            if not logged:
+                self._log_call(request, model, started_at, attempts, (time.perf_counter() - t0) * 1000, error=str(e))
+            raise
         self._record_failure(request.agent_id)
-        attempts = self.max_retries + 1
         self._log_call(request, model, started_at, attempts, (time.perf_counter() - t0) * 1000, error=str(last_err))
         raise LLMError(f"{self.backend.name}/{model} failed after {attempts} attempts: {last_err}")
 

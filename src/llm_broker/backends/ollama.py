@@ -28,7 +28,7 @@ class OllamaBackend:
         self.num_ctx = num_ctx
 
     # -- helpers -----------------------------------------------------------
-    def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, path: str, body: Dict[str, Any], timeout_s: float | None = None) -> Dict[str, Any]:
         req = urllib.request.Request(
             self.host + path,
             data=json.dumps(body).encode("utf-8"),
@@ -36,7 +36,7 @@ class OllamaBackend:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            with urllib.request.urlopen(req, timeout=timeout_s or self.timeout_s) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise LLMError(f"Ollama HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:300]}") from e
@@ -95,7 +95,10 @@ class OllamaBackend:
             body["format"] = request.json_schema
 
         t0 = time.perf_counter()
-        data = self._post("/api/chat", body)
+        if request.timeout_s is None:
+            data = self._post("/api/chat", body)
+        else:
+            data = self._post("/api/chat", body, min(self.timeout_s, request.timeout_s))
         latency = (time.perf_counter() - t0) * 1000
         if "error" in data:
             raise LLMError(f"Ollama error: {data['error']}")

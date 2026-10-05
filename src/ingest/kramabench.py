@@ -237,7 +237,8 @@ class KramaBenchTask(BenchmarkTask):
             d["subtasks"] = [subtasks]
 
         # 7. Ground truth and expected output
-        expected = d.get("expected_output") or d.get("ground_truth") or d.get("solution") or d.get("target_insight")
+        expected = next((d[k] for k in ("expected_output", "ground_truth", "solution", "target_insight")
+                         if k in d and d[k] is not None), None)
         d["expected_output"] = expected
         if expected is not None:
             if isinstance(expected, (dict, list)):

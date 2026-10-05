@@ -8,6 +8,7 @@ and orchestrates the batch trial runner used across all three project benchmarks
 from __future__ import annotations
 
 import csv
+import asyncio
 import json
 import logging
 import random
@@ -97,13 +98,8 @@ class MSCoReIngestor:
             # E.g. {"A": "Choice A", "B": "Choice B"}
             choices = [f"{k}: {v}" for k, v in choices.items()]
 
-        ground_truth = str(
-            data.get("ground_truth")
-            or data.get("answer")
-            or data.get("label")
-            or data.get("correct_answer")
-            or ""
-        )
+        ground_truth = str(next((data[k] for k in ("ground_truth", "answer", "label", "correct_answer")
+                                 if k in data and data[k] is not None), ""))
         domain = str(data.get("domain") or data.get("category") or data.get("topic") or "collaborative-reasoning")
 
         return MSCoReItem(
@@ -606,5 +602,4 @@ if __name__ == "__main__":
     for name, fpath in figs.items():
         print(f"    • {fpath}")
     print("=" * 65)
-
 

@@ -80,15 +80,19 @@ class BenchmarkEvaluator:
         """
         Evaluate a predicted claim against the task's ground truth.
         """
-        gt_raw = str(task.ground_truth or "").strip()
-        pred_raw = str(predicted_claim or "").strip()
+        gt_raw = str(task.ground_truth if task.ground_truth is not None else "").strip()
+        pred_raw = str(predicted_claim if predicted_claim is not None else "").strip()
 
         # Normalization
         norm_gt = re.sub(r"[\s\-_,.:;]+", " ", gt_raw.lower()).strip()
         norm_pred = re.sub(r"[\s\-_,.:;]+", " ", pred_raw.lower()).strip()
 
-        exact_match = (gt_raw == pred_raw)
-        normalized_match = (norm_gt == norm_pred) or (norm_gt in norm_pred) or (norm_pred in norm_gt)
+        exact_match = bool(gt_raw and pred_raw) and (gt_raw == pred_raw)
+        # Retain the historical diagnostic matching for non-empty text; prototype grading
+        # uses a separate strict evaluator and never treats substrings as correct answers.
+        normalized_match = bool(norm_gt and norm_pred) and (
+            (norm_gt == norm_pred) or (norm_gt in norm_pred) or (norm_pred in norm_gt)
+        )
         token_f1 = compute_token_f1(pred_raw, gt_raw)
 
         matched_diff: Optional[str] = None
@@ -97,7 +101,7 @@ class BenchmarkEvaluator:
             differentials = getattr(task, "differential_diagnoses")
             for diff in differentials:
                 clean_diff = re.sub(r"[\s\-_,.:;]+", " ", str(diff).lower()).strip()
-                if clean_diff in norm_pred or norm_pred in clean_diff:
+                if clean_diff and norm_pred and (clean_diff in norm_pred or norm_pred in clean_diff):
                     matched_diff = str(diff)
                     break
 

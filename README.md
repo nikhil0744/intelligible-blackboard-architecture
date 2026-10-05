@@ -44,6 +44,28 @@ Configure model/backend settings using `.env.example`. Live Ollama runs require 
 
 ## Run the backend and dashboard
 
+**Known prototype error:** live runs can still exhaust the three validation
+attempts when models write ambiguously grouped fractions, such as
+`1/3 / 19/30` instead of `(1/3) / (19/30)`. A run may therefore stop with
+`arithmetic_mismatch` before producing a valid contribution. The prototype
+still needs live-model troubleshooting before it can be relied on for a demo.
+
+For the presentation prototype, use [the prototype quickstart](docs/guides/prototype_quickstart.md)
+and [the Colab T4 notebook](notebooks/prototype_colab.ipynb). The supported entrypoints are
+`python -m scripts.prototype_run` for compute and `python -m scripts.prototype_demo`
+for a live artifact viewer. This path records actual questions, explicit three-agent
+answer agreement, separately graded answers, per-trial usage, and replayable traces.
+Recovery is disabled. The legacy batch runner and the React dashboard's sample metrics
+are not the presentation compute/result path.
+
+For harder questions with a counterfactual intervention after observed live
+disagreement, use the separate [natural recovery demo](docs/guides/prototype_recovery_demo.md)
+entrypoint, `scripts.prototype_recovery`. It verifies an isolated historical
+alternative before promotion and requires new live endorsements afterward.
+Both prototype runners check declared numerical calculations with an exact
+fraction calculator and repair stale endorsements before accepting them. This
+checks arithmetic consistency; correctness against the task is graded separately.
+
 ```bash
 uvicorn streaming.main:app --reload --port 8000
 ```
