@@ -3,5 +3,9 @@
   "sampled_child": "1/2",
   "correlated_detectors": "1/2",
   "two_envelopes": 25,
-  "load_mix": "A"
+  "load_mix": "A",
+  "persistent_false_positive": "160/269",
+  "two_draw_urn": "7/12",
+  "bus_gaps": ["25/4", "6.25"],
+  "noisy_relay": "17/41"
 }

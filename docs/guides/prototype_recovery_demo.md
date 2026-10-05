@@ -31,9 +31,11 @@ inference; even an endorsed recovery can be incorrect.
 ## Questions to try
 
 [challenging_tasks.json](../../examples/prototype/challenging_tasks.json) contains
-five examples. They are designed to expose different reasoning mistakes, but
+nine examples. They are designed to expose different reasoning mistakes, but
 natural model disagreement cannot be guaranteed. The three roles use the same
-Qwen model, so their mistakes can also be correlated.
+Qwen model, so their mistakes can also be correlated. The last four are multi-stage:
+each stage has its own tempting shortcut with a *different* wrong answer, so roles
+that slip at different stages post conflicting claims rather than one shared error.
 
 | Task ID | Potential disagreement | Correct answer under the stated conditions |
 | --- | --- | --- |
@@ -42,9 +44,13 @@ Qwen model, so their mistakes can also be correlated.
 | `sampled_child` | Using the familiar “at least one Tuesday boy” puzzle instead of the specified random-child reporting mechanism | `1/2` |
 | `two_envelopes` | Treating possible amounts without their specified prior versus conditioning on the observed envelope | `25` |
 | `load_mix` | Comparing pooled success versus comparing rates within both load categories | `A` |
+| `persistent_false_positive` | Ignoring the carriers (`16/17`) or treating repeat runs as independent (`1600/1961`) versus splitting healthy people on carrier status | `160/269` |
+| `two_draw_urn` | Not updating the box on the first red (`1/2`), forgetting the removed ball (`2/3`), or the marginal first-draw rate (`3/5`) | `7/12` |
+| `bus_gaps` | Half the average gap (`5`) versus weighting each gap by the chance of arriving in it | `25/4` (or `6.25`) |
+| `noisy_relay` | One relay's accuracy (`4/7`), ignoring double flips (`2/5`), or ignoring the prior (`17/25`) | `17/41` |
 
-Start with `biased_host`, then try `correlated_detectors` or `sampled_child` if
-the first case reaches ordinary agreement. Retain the runs where everyone agrees
+Start with `persistent_false_positive` or `two_draw_urn`, then try `biased_host`,
+`correlated_detectors` or `sampled_child` if the first case reaches ordinary agreement. Retain the runs where everyone agrees
 too; selecting an interesting trace for a demonstration is different from
 reporting an unbiased recovery rate. Do not raise temperature simply to claim
 better recovery. A new seed is another run of the same question.

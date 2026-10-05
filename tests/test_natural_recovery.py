@@ -13,6 +13,7 @@ from llm_broker.ledger import current_scope
 from scripts import prototype_artifacts
 from scripts.prototype_recovery import RESOLVER, run_recovery
 from scripts.prototype_run import PrototypeTask, load_inputs
+from scripts.prototype_status import describe
 
 
 @pytest.fixture(autouse=True)
@@ -305,7 +306,7 @@ def test_shared_budget_and_cancel_preserve_partial_natural_history(tmp_path):
 def test_challenging_references_follow_the_stated_sampling_rules():
     root = Path(__file__).resolve().parents[1]
     tasks, refs = load_inputs(root / "examples/prototype/challenging_tasks.json", root / "examples/prototype/challenging_references.json")
-    assert len(tasks) == 5
+    assert len(tasks) == 9
     assert F(1, 3) / (F(1, 3) * F(9, 10) + F(1, 3)) == F(refs["biased_host"])
     observed = both = 0
     for genders in itertools.product(["B", "G"], repeat=2):
@@ -319,3 +320,63 @@ def test_challenging_references_follow_the_stated_sampling_rules():
     assert sum(alternatives) / len(alternatives) == refs["two_envelopes"]
     assert F(9, 10) > F(80, 100) and F(40, 100) > F(3, 10) and F(49, 110) < F(83, 110)
     assert refs["load_mix"] == "A"
+
+
+def test_harder_references_follow_brute_force_enumeration():
+    root = Path(__file__).resolve().parents[1]
+    tasks, refs = load_inputs(root / "examples/prototype/challenging_tasks.json", root / "examples/prototype/challenging_references.json")
+    assert len(tasks) == 9 and set(refs) == {t.task_id for t in tasks}
+    # Healthy carriers make repeated false positives perfectly correlated.
+    healthy = F(1, 10) + F(9, 10) * F(1, 10) ** 2
+    assert F(1, 5) * F(4, 5) ** 2 / (F(1, 5) * F(4, 5) ** 2 + F(4, 5) * healthy) == F(refs["persistent_false_positive"])
+    first_red = both_red = F(0)
+    for box in (["R"] * 4 + ["B"], ["R"] * 2 + ["B"] * 3):
+        draws = list(itertools.permutations(box, 2))
+        for first, second in draws:
+            if first == "R":
+                first_red += F(1, 2) / len(draws); both_red += F(1, 2) / len(draws) * (second == "R")
+    assert both_red / first_red == F(refs["two_draw_urn"])
+    # Uniform arrival over one 20-minute cycle; waiting time in a gap of length L averages L/2.
+    wait = sum(F(length, 20) * F(length, 2) for length in (5, 15))
+    assert all(F(answer) == wait for answer in refs["bus_gaps"])
+    sent_one = received_one = F(0)
+    for bit, prior in ((1, F(1, 4)), (0, F(3, 4))):
+        for flips in itertools.product((0, 1), repeat=2):
+            weight = prior * F(1, 5) ** sum(flips) * F(4, 5) ** (2 - sum(flips))
+            if bit ^ flips[0] ^ flips[1]:
+                received_one += weight; sent_one += weight * bit
+    assert sent_one / received_one == F(refs["noisy_relay"])
+
+
+@pytest.mark.parametrize("task_id", ["persistent_false_positive", "two_draw_urn", "bus_gaps", "noisy_relay"])
+def test_harder_tasks_run_the_scripted_sandbox_and_status_reports_it(tmp_path, task_id):
+    root = Path(__file__).resolve().parents[1]
+    tasks, refs = load_inputs(root / "examples/prototype/challenging_tasks.json", root / "examples/prototype/challenging_references.json")
+    task = next(t for t in tasks if t.task_id == task_id)
+    result = run_recovery(task, tmp_path / "run", settings=InferenceSettings(backend="mock", model="test-model"), references=refs)
+    assert result["report"]["triggered"] and result["report"]["sandbox_isolated"] and result["report"]["promoted"]
+    assert result["report"]["task_correct"] is False  # scripted text is never graded as solving the task
+    lines = "\n".join(describe(tmp_path / "run"))
+    assert f"Task: {task_id}" in lines and "Resolver spawned; its sandbox proposal: 'SCRIPTED RECOVERY ANSWER'" in lines
+    assert "Promoted to live board: True" in lines
+
+
+def test_status_explains_why_the_resolver_was_not_spawned(tmp_path):
+    def agree(req):
+        active = re.search(r"The active proposal is id=([^,]+), claim=", req.messages[0].content)
+        return decision("RATIFY" if active else "REVISE", "10/19", active[1] if active else None)
+    run(tmp_path, agree)
+    lines = "\n".join(describe(tmp_path / "run"))
+    assert "Resolver NOT spawned. All three agents ratified" in lines and "resolver sandbox posts: 0" in lines
+    ordinary = tmp_path / "ordinary"
+    ordinary.mkdir()
+    (ordinary / "manifest.json").write_text(json.dumps({"kind": "text_deliberation_prototype"}))
+    assert describe(ordinary)[0].startswith("RECOVERY DISABLED")
+    assert describe(tmp_path / "missing")[0].startswith("No manifest")
+
+
+def test_colab_notebook_code_cells_are_valid_python():
+    notebook = json.loads((Path(__file__).resolve().parents[1] / "notebooks/prototype_colab.ipynb").read_text(encoding="utf-8"))
+    for index, cell in enumerate(notebook["cells"]):
+        if cell["cell_type"] == "code":
+            compile("".join(cell["source"]), f"cell {index}", "exec")

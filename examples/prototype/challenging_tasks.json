@@ -23,5 +23,25 @@
     "task_id": "load_mix",
     "question": "Routing strategy A succeeds on 9 of 10 low-load tests and 40 of 100 high-load tests. Strategy B succeeds on 80 of 100 low-load tests and 3 of 10 high-load tests. The deployment criterion is higher success probability within BOTH load categories, comparing like-for-like conditions, rather than pooled success across these different test mixes. Which strategy meets the criterion? Compare both category rates and explain why the pooled rates could lead to a different conclusion. Put only A or B in prediction.claim.",
     "context": {"answer_format": "A or B"}
+  },
+  {
+    "task_id": "persistent_false_positive",
+    "question": "A condition has prior probability 1/5. A person with the condition tests positive on each run of a test with probability 4/5, independently across runs. A person without the condition carries a cross-reacting antibody with probability 1/10; a carrier tests positive on every run. A non-carrier without the condition tests positive on each run with probability 1/10, independently across runs. One person is tested twice and both runs are positive. What is the posterior probability that this person has the condition? Derive the likelihood of two positive runs for each underlying group before applying Bayes' rule. Put only the reduced fraction in prediction.claim.",
+    "context": {"answer_format": "reduced fraction"}
+  },
+  {
+    "task_id": "two_draw_urn",
+    "question": "Box 1 contains 4 red balls and 1 blue ball. Box 2 contains 2 red balls and 3 blue balls. A box is chosen uniformly at random and two balls are drawn from it one after the other, without replacement. You are told only that the first ball drawn is red. What is the probability that the second ball drawn is also red? Enumerate the joint outcomes of box, first draw and second draw. Put only the reduced fraction in prediction.claim.",
+    "context": {"answer_format": "reduced fraction"}
+  },
+  {
+    "task_id": "bus_gaps",
+    "question": "On a bus route, the gaps between consecutive buses alternate exactly between 5 minutes and 15 minutes, all day. Buses depart immediately on arrival. A passenger arrives at the stop at a time chosen uniformly at random over the day, independently of the schedule. What is the passenger's expected waiting time, in minutes, until the next bus? Consider which gap a uniformly random arrival time is likely to fall into. Put only the reduced fraction in prediction.claim.",
+    "context": {"answer_format": "reduced fraction"}
+  },
+  {
+    "task_id": "noisy_relay",
+    "question": "A source bit is 1 with prior probability 1/4 and 0 otherwise. It is sent through two relays in sequence. Each relay independently flips the bit it receives with probability 1/5 and otherwise passes it on unchanged. The receiver reads 1. What is the posterior probability that the source bit was 1? Derive the end-to-end channel probabilities before applying Bayes' rule. Put only the reduced fraction in prediction.claim.",
+    "context": {"answer_format": "reduced fraction"}
   }
 ]
