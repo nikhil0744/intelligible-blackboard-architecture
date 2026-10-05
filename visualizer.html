@@ -257,11 +257,11 @@
     }
 
     .agent-node {
-      width: 240px;
+      width: 280px;
       background: var(--card-inner);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 14px;
+      padding: 12px 14px;
       transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
@@ -318,6 +318,101 @@
     .agent-node.active .agent-pulse {
       background: var(--ratify);
       box-shadow: 0 0 8px var(--ratify);
+    }
+
+    /* Collapsible Thought Flowchart Styles */
+    .thought-toggle-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #a1a1aa;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 8px;
+      transition: all 0.2s ease;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .thought-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.09);
+      color: #fafafa;
+      border-color: var(--border-highlight);
+    }
+
+    .thought-toggle-btn.active {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: var(--revise);
+    }
+
+    .agent-thought-flow {
+      display: none;
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .agent-thought-flow.open {
+      display: block;
+      animation: fadeInFlow 0.2s ease;
+    }
+
+    @keyframes fadeInFlow {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .thought-flowchart {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .tf-node {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid #27272a;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+      transition: all 0.2s ease;
+    }
+
+    .tf-node-header {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .tf-node-body {
+      color: #e4e4e7;
+      line-height: 1.35;
+      font-size: 11px;
+    }
+
+    .tf-connector {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 10px;
+      line-height: 1;
+      margin: 1px 0;
+      user-select: none;
+    }
+
+    .tf-confidence {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 10px;
+      color: #a1a1aa;
     }
 
     /* Central Blackboard Core */
@@ -467,14 +562,14 @@
     .sandbox-spawn-container.visible {
       opacity: 1;
       transform: translateY(0) scale(1);
-      max-height: 400px;
+      max-height: 2500px;
       margin-top: 10px;
     }
 
     .sandbox-card {
-      background: #110d1a;
-      border: 1px solid rgba(168, 85, 247, 0.5);
-      box-shadow: 0 0 30px rgba(168, 85, 247, 0.15);
+      background: #0f0a17;
+      border: 1px solid rgba(168, 85, 247, 0.45);
+      box-shadow: 0 0 35px rgba(168, 85, 247, 0.18);
       border-radius: 12px;
       padding: 18px;
     }
@@ -483,9 +578,11 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid rgba(168, 85, 247, 0.3);
+      border-bottom: 1px solid rgba(168, 85, 247, 0.25);
       padding-bottom: 10px;
       margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .sandbox-title {
@@ -496,6 +593,7 @@
       align-items: center;
       gap: 8px;
       font-family: ui-monospace, SFMono-Regular, monospace;
+      letter-spacing: 0.5px;
     }
 
     .sandbox-pulse-dot {
@@ -512,30 +610,215 @@
       100% { opacity: 1; transform: scale(1.1); }
     }
 
-    .sandbox-timeline {
+    .btn-sb-toggle {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #e9d5ff;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      transition: all 0.15s ease;
+    }
+
+    .btn-sb-toggle:hover {
+      background: rgba(168, 85, 247, 0.3);
+      color: #fff;
+    }
+
+    .sim-status-banner {
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      border-radius: 8px;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .sim-dispatch-schematic {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px dashed rgba(168, 85, 247, 0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 10px;
+      overflow-x: auto;
+      gap: 8px;
+    }
+
+    .sim-schematic-node {
+      background: #18181b;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .sim-schematic-arrow {
+      color: var(--sandbox);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .sim-trajectory-rail {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      overflow-x: auto;
+    }
+
+    .sim-rail-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    .sim-rail-item.active {
+      color: #fafafa;
+      font-weight: 700;
+    }
+
+    .sim-rail-item.winner {
+      color: var(--ratify);
+      font-weight: 700;
+    }
+
+    .sim-trials-chamber {
+      display: none;
+      animation: fadeInFlow 0.25s ease;
+      margin-top: 12px;
+    }
+
+    .sim-trials-chamber.open {
+      display: block;
+    }
+
+    .sim-trials-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 12px;
     }
 
-    .sb-step {
-      background: rgba(24, 24, 27, 0.8);
-      border: 1px solid rgba(168, 85, 247, 0.3);
-      border-radius: 8px;
-      padding: 10px;
+    @media (max-width: 1024px) {
+      .sim-trials-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .trial-card {
+      background: rgba(20, 16, 28, 0.95);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 11px;
+      transition: all 0.2s ease;
+    }
+
+    .trial-card.winner {
+      border-color: var(--ratify);
+      box-shadow: 0 0 20px rgba(52, 211, 153, 0.15);
+      background: rgba(14, 26, 20, 0.95);
+    }
+
+    .trial-card.rejected {
+      border-color: rgba(244, 63, 94, 0.3);
+      opacity: 0.9;
+    }
+
+    .trial-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 6px;
+    }
+
+    .trial-title {
+      font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #fafafa;
       font-size: 11px;
     }
 
-    .sb-step-title {
+    .trial-badge {
       font-family: ui-monospace, SFMono-Regular, monospace;
-      color: #d8b4fe;
-      margin-bottom: 4px;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
       font-weight: 600;
     }
 
-    .sb-step-desc {
+    .trial-badge.sub-threshold { background: rgba(244, 63, 94, 0.15); color: #fca5a5; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .trial-badge.critique { background: rgba(251, 191, 36, 0.15); color: #fcd34d; border: 1px solid rgba(251, 191, 36, 0.3); }
+    .trial-badge.winner { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.4); }
+
+    .trial-section-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      margin-bottom: 2px;
+    }
+
+    .trial-prompt-box {
+      background: #09090b;
+      border-left: 3px solid var(--sandbox);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #e9d5ff;
+      font-size: 10px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+    }
+
+    .trial-response-box {
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 4px;
+      padding: 6px 8px;
+      color: #f4f4f5;
+      line-height: 1.35;
+    }
+
+    .trial-critique-box {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      padding: 6px 8px;
       color: #a1a1aa;
-      line-height: 1.3;
+      line-height: 1.35;
+    }
+
+    .trial-action-box {
+      margin-top: auto;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 10px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     /* Bottom Inspector Panel */
@@ -625,6 +908,10 @@
         <span>🔍 Inspect Sandbox</span>
       </button>
 
+      <button class="btn" id="toggleThoughtBtn" onclick="toggleAllThoughtFlows()" title="Toggle Collapsible Agent Thought Flowcharts">
+        <span>🧠 Cognitive Flows:</span> <span id="thoughtToggleState" style="color: var(--text-muted); font-weight: 700;">Off</span>
+      </button>
+
       <div style="width: 1px; height: 18px; background: var(--border);"></div>
 
       <button class="btn" onclick="resetFlow()" title="Reset to Start">↺ Reset</button>
@@ -676,6 +963,35 @@
             <span class="agent-pulse"></span>
             <span id="agent0Status">Idle • Listening</span>
           </div>
+          <button class="thought-toggle-btn" id="agent0ThoughtToggle" onclick="toggleSingleThoughtFlow(0)">
+            <span>🧠 Thought Flowchart</span> <span id="agent0ThoughtArrow">▾</span>
+          </button>
+          <div class="agent-thought-flow" id="agent0ThoughtFlow">
+            <div class="thought-flowchart">
+              <div class="tf-node">
+                <div class="tf-node-header">🔍 Ingested Evidence</div>
+                <div class="tf-node-body" id="agent0EvidenceText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">💡 Working Rule / Hypothesis</div>
+                <div class="tf-node-body" id="agent0HypothesisText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">⚙️ Deliberation Chain</div>
+                <div class="tf-node-body" id="agent0DeliberationText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">⚡ Selected Action</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 3px;">
+                  <span class="protocol-tag-badge tag-IDLE" id="agent0ActionTag">IDLE</span>
+                  <span class="tf-confidence" id="agent0ConfidenceText">Conf: —</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Agent 1 -->
@@ -688,6 +1004,35 @@
             <span class="agent-pulse"></span>
             <span id="agent1Status">Idle • Listening</span>
           </div>
+          <button class="thought-toggle-btn" id="agent1ThoughtToggle" onclick="toggleSingleThoughtFlow(1)">
+            <span>🧠 Thought Flowchart</span> <span id="agent1ThoughtArrow">▾</span>
+          </button>
+          <div class="agent-thought-flow" id="agent1ThoughtFlow">
+            <div class="thought-flowchart">
+              <div class="tf-node">
+                <div class="tf-node-header">🔍 Ingested Evidence</div>
+                <div class="tf-node-body" id="agent1EvidenceText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">💡 Working Rule / Hypothesis</div>
+                <div class="tf-node-body" id="agent1HypothesisText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">⚙️ Deliberation Chain</div>
+                <div class="tf-node-body" id="agent1DeliberationText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">⚡ Selected Action</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 3px;">
+                  <span class="protocol-tag-badge tag-IDLE" id="agent1ActionTag">IDLE</span>
+                  <span class="tf-confidence" id="agent1ConfidenceText">Conf: —</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Agent 2 -->
@@ -699,6 +1044,35 @@
           <div class="agent-status-text">
             <span class="agent-pulse"></span>
             <span id="agent2Status">Idle • Listening</span>
+          </div>
+          <button class="thought-toggle-btn" id="agent2ThoughtToggle" onclick="toggleSingleThoughtFlow(2)">
+            <span>🧠 Thought Flowchart</span> <span id="agent2ThoughtArrow">▾</span>
+          </button>
+          <div class="agent-thought-flow" id="agent2ThoughtFlow">
+            <div class="thought-flowchart">
+              <div class="tf-node">
+                <div class="tf-node-header">🔍 Ingested Evidence</div>
+                <div class="tf-node-body" id="agent2EvidenceText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">💡 Working Rule / Hypothesis</div>
+                <div class="tf-node-body" id="agent2HypothesisText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">⚙️ Deliberation Chain</div>
+                <div class="tf-node-body" id="agent2DeliberationText">—</div>
+              </div>
+              <div class="tf-connector">↓</div>
+              <div class="tf-node">
+                <div class="tf-node-header">⚡ Selected Action</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 3px;">
+                  <span class="protocol-tag-badge tag-IDLE" id="agent2ActionTag">IDLE</span>
+                  <span class="tf-confidence" id="agent2ConfidenceText">Conf: —</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -737,29 +1111,77 @@
         </div>
       </div>
 
-      <!-- SEAMLESS SPAWNED SANDBOX VIEW -->
+      <!-- SEAMLESS SPAWNED WHAT-IF SIMULATION ENGINE -->
       <div class="sandbox-spawn-container" id="sandboxContainer">
         <div class="sandbox-card">
           <div class="sandbox-header">
             <div class="sandbox-title">
               <span class="sandbox-pulse-dot"></span>
-              <span id="sbBranchTitle">ISOLATED COUNTERFACTUAL SANDBOX (Branch: #cf_4a9b2)</span>
+              <span id="sbBranchTitle">⚡ AUTONOMOUS WHAT-IF SIMULATION ENGINE</span>
             </div>
-            <span id="sbBranchSubtitle" style="font-size: 11px; font-family: monospace; color: #d8b4fe;">Rolled back to Turn 2 • Isolated Memory</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="sbBranchSubtitle" style="font-size: 11px; font-family: monospace; color: #d8b4fe;">Branch: #cf_4a9b2 • Hill-Climbing Search (Max 6 Rounds)</span>
+              <button class="btn-sb-toggle" id="sbTrialsToggleBtn" onclick="toggleSandboxTrialsExpand()">
+                <span>▾ Expand 3 Candidate Trials</span>
+              </button>
+            </div>
           </div>
 
-          <div class="sandbox-timeline" id="sandboxTimeline">
-            <div class="sb-step">
-              <div class="sb-step-title">[1] Divergence Attribution</div>
-              <div class="sb-step-desc">Identified Turn 2 as root clash point. Live board frozen; cloned history into deep-copy sandbox.</div>
+          <!-- Compact Summary Status Banner -->
+          <div class="sim-status-banner" id="simStatusBanner">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-weight: 700; color: #e9d5ff;">ENGINE STATE:</span>
+              <span id="simSummaryStateText" style="color: #fafafa;">Attributed collision at Step 2 • 3 Search Trials Simulated</span>
             </div>
-            <div class="sb-step">
-              <div class="sb-step-title">[2] What-If Simulation</div>
-              <div class="sb-step-desc">Simulated hypothetical prompt: <em>"Acknowledge IPF honeycombing while retaining secondary cardiac monitoring."</em></div>
+            <div style="display: flex; align-items: center; gap: 12px; font-family: monospace;">
+              <span style="color: var(--text-muted);">Convergence: <strong id="simPeakScoreText" style="color: var(--ratify);">S_k = 0.95</strong></span>
+              <span style="color: #3f3f46;">|</span>
+              <span id="simOutcomeBadge" class="protocol-tag-badge tag-RATIFY">WINNER MERGED</span>
             </div>
-            <div class="sb-step">
-              <div class="sb-step-title">[3] Peer Ratification</div>
-              <div class="sb-step-desc">Both peer models ratified resolution inside sandbox (Score: 0.95). Injected back to live board!</div>
+          </div>
+
+          <!-- Simulation Prompt Dispatch Schematic -->
+          <div class="sim-dispatch-schematic">
+            <div class="sim-schematic-node" style="border-color: rgba(168, 85, 247, 0.5); color: #d8b4fe;">
+              🤖 Counterfactual Agent (#cf_resolver)
+            </div>
+            <span class="sim-schematic-arrow">──[Synthesized Prompt #k]──▶</span>
+            <div class="sim-schematic-node" style="border-color: rgba(56, 189, 248, 0.5); color: #7dd3fc;">
+              🧬 Cloned Target Model (Sandbox)
+            </div>
+            <span class="sim-schematic-arrow">──[Candidate Revision]──▶</span>
+            <div class="sim-schematic-node" style="border-color: rgba(251, 191, 36, 0.5); color: #fde68a;">
+              👥 Peer Reaction Engine
+            </div>
+            <span class="sim-schematic-arrow">──[PXP Agreement Score S_k]──▶</span>
+            <div class="sim-schematic-node" style="border-color: rgba(52, 211, 153, 0.5); color: #6ee7b7;">
+              ⚖️ Convergence Evaluator
+            </div>
+          </div>
+
+          <!-- Multi-Trial Score Trajectory Rail -->
+          <div class="sim-trajectory-rail" id="simTrajectoryRail">
+            <span style="color: var(--text-muted); font-size: 10px;">SCORE TRAJECTORY:</span>
+            <div class="sim-rail-item" id="railTrial1">
+              <span>Trial 1: S₁=0.54</span>
+              <span style="color: #fca5a5;">(❌ Rejected)</span>
+            </div>
+            <span style="color: var(--border-highlight);">➔</span>
+            <div class="sim-rail-item" id="railTrial2">
+              <span>Trial 2: S₂=0.78</span>
+              <span style="color: #fcd34d;">(⚠️ Critique)</span>
+            </div>
+            <span style="color: var(--border-highlight);">➔</span>
+            <div class="sim-rail-item winner" id="railTrial3">
+              <span>Trial 3: S₃=0.95</span>
+              <span style="color: var(--ratify);">(🏆 WINNER)</span>
+            </div>
+          </div>
+
+          <!-- Expandable Multi-Trial Candidate Cards Grid -->
+          <div class="sim-trials-chamber" id="simTrialsChamber">
+            <div class="sim-trials-grid" id="simTrialsGrid">
+              <!-- Dynamically populated candidate trials -->
             </div>
           </div>
         </div>
@@ -800,6 +1222,8 @@
         sandbox: {
           branch: "COUNTERFACTUAL SANDBOX (Awaiting Run)",
           subtitle: "Will populate automatically upon execution",
+          peakScore: 1.0,
+          trials: [],
           steps: [
             { title: "[1] Awaiting Execution", desc: "Run a notebook demo cell to capture real live agent thoughts." },
             { title: "[2] Telemetry Logging", desc: "outputs/live_trace.json will automatically log all decisions." },
@@ -824,23 +1248,74 @@
             status: "AWAITING RUN",
             tokens: "0 tok",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Awaiting input", hypothesis: "Standby", deliberation: "Waiting for session start...", action: "IDLE", conf: "—" },
+              { evidence: "Awaiting input", hypothesis: "Standby", deliberation: "Waiting for session start...", action: "IDLE", conf: "—" },
+              { evidence: "Awaiting input", hypothesis: "Standby", deliberation: "Waiting for session start...", action: "IDLE", conf: "—" }
+            ]
           }
         ]
       },
 
       deadlock: {
-        title: "Scenario 1: Deadlock & Sandbox Recovery (Clinical IPF)",
-        task: "54-year-old male presents with 6 months of progressive dyspnea on exertion and dry cough. Biapical fine crackles and honeycombing noted.",
+        title: "Scenario 1: Deadlock & Sandbox Recovery (Clinical IPF vs CHF)",
+        task: "54-year-old male presents with 6 months of progressive dyspnea on exertion and dry cough. Physical exam reveals finger clubbing and bilateral bibasilar end-inspiratory Velcro crackles. High-resolution chest CT shows subpleural, basal-predominant reticular abnormalities with honeycombing. BNP and echocardiogram are unremarkable.",
         sessionId: "session_clinical_ipf_001",
         hardware: "NVIDIA T4 • GPU / Fixture Spike Mode",
         sandbox: {
-          branch: "ISOLATED COUNTERFACTUAL SANDBOX (Branch: #cf_4a9b2)",
-          subtitle: "Rolled back to Turn 2 • Isolated Memory",
+          branch: "⚡ AUTONOMOUS WHAT-IF SIMULATION ENGINE",
+          subtitle: "Branch: #cf_4a9b2 • Hill-Climbing Search (Max 6 Rounds) • Threshold S_k ≥ 0.70",
+          peakScore: 0.95,
+          trials: [
+            {
+              trial: 1,
+              title: "Trial 1 • Initial Concession Probe",
+              score: 0.54,
+              status: "REJECTED (Score: 0.54 < 0.70)",
+              statusClass: "sub-threshold",
+              prompt: "[RETROSPECTIVE SYNTHESIS PROMPT #1]
+Target Agent: Dr. Cardiologist
+Context: Impasse detected between Congestive Heart Failure and Idiopathic Pulmonary Fibrosis.
+Clashing Evidence: subpleural honeycombing on HRCT, finger clubbing, normal BNP
+Task: Formulate candidate revision (PXPTag.REVISE) acknowledging pulmonologist's objection.",
+              response: "Propose mild interstitial lung changes alongside primary Congestive Heart Failure (CHF). Maintain diuretic therapy.",
+              peerCritique: "REJECT: Dr. Pulmonologist rejects. Honeycombing represents irreversible fibrotic architectural remodeling, not 'mild interstitial changes'. Volume depletion will not resolve alveolar collapse.",
+              action: "Sub-threshold agreement (0.54) ➔ Extracting critique for Trial 2"
+            },
+            {
+              trial: 2,
+              title: "Trial 2 • Peer Critique-Guided Feedback",
+              score: 0.78,
+              status: "IMPROVING (Score: 0.78 < 0.85)",
+              statusClass: "critique",
+              prompt: "[CRITIQUE-GUIDED PROMPT #2]
+Target Agent: Dr. Cardiologist
+[PRIOR PEER CRITIQUE]
+\"Address peer's objection: Honeycombing is structural fibrotic distortion, not transient fluid. Shift focus away from primary diuresis.\"
+Task: Refine compromise proposition.",
+              response: "Acknowledge IPF honeycombing as significant finding. Shift cardiac focus away from primary diuresis toward secondary monitoring.",
+              peerCritique: "REVISE: Dr. Pulmonologist notes substantial progress (Score 0.78), but requests explicit primary IPF classification with antifibrotic priority.",
+              action: "Critique integrated ➔ Refining candidate for Trial 3"
+            },
+            {
+              trial: 3,
+              title: "Trial 3 • Pareto-Optimal Compromise",
+              score: 0.95,
+              status: "WINNER SELECTED (Score: 0.95 ≥ 0.70)",
+              statusClass: "winner",
+              prompt: "[FINAL SYNTHESIS PROMPT #3]
+Target: Both Specialists
+Task: Synthesize final dual-care compromise: Classify IPF as primary etiology with antifibrotic therapy, while retaining secondary outpatient cardiac telemetry.",
+              response: "RESOLVED: Idiopathic Pulmonary Fibrosis (IPF) primary diagnosis with secondary cardiac monitoring. Antifibrotic therapy (Pirfenidone/Nintedanib) indicated.",
+              peerCritique: "Unanimous RATIFY: Both peer models ratify (Score 0.95). Intelligibility Level: ULTRA_STRONG. Consensus certified!",
+              action: "🚀 Merged to Main Blackboard DAG (Turn 5)"
+            }
+          ],
           steps: [
             { title: "[1] Divergence Attribution", desc: "Identified Turn 2 as root clash point. Live board frozen; cloned history into deep-copy sandbox." },
-            { title: "[2] What-If Simulation", desc: "Simulated hypothetical prompt: <em>\"Acknowledge IPF honeycombing while retaining secondary cardiac monitoring.\"</em>" },
-            { title: "[3] Peer Ratification", desc: "Both peer models ratified resolution inside sandbox (Score: 0.95). Injected back to live board!" }
+            { title: "[2] What-If Simulation", desc: "3 iterative hill-climbing trials executed with peer critique injection." },
+            { title: "[3] Peer Ratification", desc: "Dual-care compromise unanimously ratified with Intelligibility score 0.95!" }
           ]
         },
         agents: [
@@ -861,7 +1336,12 @@
             status: "ACTIVE",
             tokens: "0 tok",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Patient history, 6 mo progressive dyspnea", hypothesis: "Cardiopulmonary differential", deliberation: "Awaiting baseline tests and peer initial assertions", action: "IDLE", conf: "—" },
+              { evidence: "HRCT imaging, physical exam", hypothesis: "Evaluating lung parenchyma", deliberation: "Reviewing bibasilar Velcro rales and lung volumes", action: "IDLE", conf: "—" },
+              { evidence: "Differential diagnostic protocol", hypothesis: "Care team supervision", deliberation: "Ensuring evidence-based PXP debate standards", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 1,
@@ -875,7 +1355,12 @@
             status: "ACTIVE",
             tokens: "775 tok (Qwen2.5-7B)",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Exertional dyspnea, bibasilar rales, age 54", hypothesis: "Congestive Heart Failure (CHF)", deliberation: "Dyspnea on exertion combined with pulmonary crackles indicates left ventricular volume overload. Diuretic intervention indicated.", action: "REVISE", conf: "0.85" },
+              { evidence: "Cardiology assertion of volume overload", hypothesis: "Evaluating alternative etiologies", deliberation: "Awaiting chest HRCT review to verify if interstitial honeycombing is present.", action: "IDLE", conf: "0.70" },
+              { evidence: "Turn 1 CHF assertion", hypothesis: "Differential monitoring", deliberation: "Awaiting peer review from pulmonology specialist before ratification.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 2,
@@ -889,7 +1374,12 @@
             status: "ACTIVE",
             tokens: "1,450 tok",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Pulmonology refutation citing honeycombing", hypothesis: "Questioning pulmonary vs cardiac overlap", deliberation: "Assessing whether reticular density could be chronic veno-occlusive stasis.", action: "IDLE", conf: "0.80" },
+              { evidence: "HRCT subpleural honeycombing, clubbing, normal BNP", hypothesis: "Idiopathic Pulmonary Fibrosis (IPF)", deliberation: "Subpleural honeycombing and clubbing are pathognomonic for IPF. Normal BNP rules out cardiogenic edema. Diuresis is contraindicated.", action: "REFUTE", conf: "0.95" },
+              { evidence: "Clashing assertions on CHF vs IPF", hypothesis: "Conflict arbitration required", deliberation: "Noting stark evidence conflict: Normal BNP directly contradicts cardiogenic pulmonary edema.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 3,
@@ -903,7 +1393,12 @@
             status: "ARGUMENT_LOOP",
             tokens: "2,120 tok",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Dry cough, crackles, exertion dyspnea", hypothesis: "Re-asserting CHF priority", deliberation: "Cough and crackles strongly fit cardiopulmonary congestion. Refusing to withdraw cardiac therapy without hemodynamic catheterization.", action: "REJECT", conf: "0.80" },
+              { evidence: "Cardiology refusal to concede", hypothesis: "Impasse detection imminent", deliberation: "Cardiology is ignoring pathognomonic radiological criteria. Antifibrotic window is at risk.", action: "IDLE", conf: "0.95" },
+              { evidence: "Turn 3 REJECT tag issued", hypothesis: "Conflict loop warning", deliberation: "Monitoring turn-by-turn PXP tags. Second consecutive rejection will trigger deadlock.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 4,
@@ -918,7 +1413,12 @@
             tokens: "2,840 tok",
             deadlock: true,
             deadlockMsg: "Circular REJECT loop (Turn 3 ↔ Turn 4). Counterfactual sandbox required.",
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Cardiology persistent rejection", hypothesis: "Unresolvable clinical collision", deliberation: "Specialists in circular disagreement. Neither model has authority to unilaterally override without sandbox attribution.", action: "REJECT", conf: "0.80" },
+              { evidence: "Structural honeycombing, normal BNP", hypothesis: "Irreversible architectural distortion vs fluid", deliberation: "Honeycombing is irreversible architectural remodeling. Treating as heart failure wastes critical antifibrotic window. Stalemate reached.", action: "REJECT", conf: "0.98" },
+              { evidence: "Circular REJECT loop (Turn 3 ↔ Turn 4)", hypothesis: "DEADLOCK TRIGGERED", deliberation: "Scheduler preempts live debate! Freezing main branch and initiating rollback to Step 2 for sandbox simulation.", action: "DEADLOCK", conf: "1.00" }
+            ]
           },
           {
             step: 5,
@@ -932,7 +1432,12 @@
             status: "DEADLOCK RESOLVED",
             tokens: "3,590 tok",
             deadlock: false,
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Sandbox prompt #3 received", hypothesis: "Compromise acceptance", deliberation: "Acknowledge primary IPF diagnosis based on CT honeycombing, while maintaining secondary cardiac monitoring telemetry.", action: "REVISE", conf: "0.92" },
+              { evidence: "Sandbox compromise formulation", hypothesis: "Consensus alignment", deliberation: "Dual protocol correctly prioritizes antifibrotic therapy while addressing cardiopulmonary monitoring. Ratification approved.", action: "RATIFY", conf: "0.96" },
+              { evidence: "Winning sandbox resolution evaluated", hypothesis: "Recovery certified", deliberation: "Hill-climbing search achieved S_k = 0.95 (Ultra-Strong). Injecting winning resolution into live board as Turn 5.", action: "REVISE", conf: "0.95" }
+            ]
           },
           {
             step: 6,
@@ -946,7 +1451,12 @@
             status: "CONSENSUS REACHED",
             tokens: "4,210 tok",
             deadlock: false,
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Synthesized hybrid care plan", hypothesis: "Final consensus", deliberation: "Co-signing dual-care order: Pirfenidone/Nintedanib initiation with outpatient cardiology telemetry follow-up.", action: "RATIFY", conf: "0.96" },
+              { evidence: "Synthesized hybrid care plan", hypothesis: "Final consensus", deliberation: "Ratifying final order. Patient receives immediate antifibrotic therapy without cardiac monitoring compromise.", action: "RATIFY", conf: "0.98" },
+              { evidence: "Unanimous specialist agreement", hypothesis: "Formal session discharge", deliberation: "All 3 agents in unanimous agreement. Intelligibility score 0.95 certified across all nodes. Blackboard closed.", action: "RATIFY", conf: "1.00" }
+            ]
           }
         ]
       },
@@ -959,6 +1469,8 @@
         sandbox: {
           branch: "COUNTERFACTUAL ENGINE (Dormant - Linear Consensus)",
           subtitle: "Linear Unanimous Consensus • Zero Interventions Needed",
+          peakScore: 1.0,
+          trials: [],
           steps: [
             { title: "[1] Conflict Monitor", desc: "Monitored turn-by-turn PXP tags for REFUTE / REJECT cycles. Zero conflicts detected." },
             { title: "[2] Linear Trajectory", desc: "Clinician, Pharmacist, and Attending unanimously ratified eGFR < 30 contraindication." },
@@ -983,7 +1495,12 @@
             status: "ACTIVE",
             tokens: "0 tok",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "eGFR 28 mL/min/1.73m², Metformin 1000mg BID", hypothesis: "Renal contraindication check", deliberation: "Evaluating renal clearance against strict safety thresholds.", action: "IDLE", conf: "—" },
+              { evidence: "Medication list: Metformin BID", hypothesis: "Pharmacokinetic review", deliberation: "Monitoring clinician assessment for drug safety verification.", action: "IDLE", conf: "—" },
+              { evidence: "Clinical orders pending", hypothesis: "Supervisory oversight", deliberation: "Co-signature protocol ready for evidence-based medication orders.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 1,
@@ -997,7 +1514,12 @@
             status: "ACTIVE",
             tokens: "775 tok • 106.5s latency",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "eGFR 28 mL/min/1.73m² (severe renal impairment)", hypothesis: "KDIGO Guideline absolute cutoff < 30", deliberation: "Drug accumulation risk is critical. Continuing metformin below eGFR 30 leads to mitochondrial inhibition and lactic acidosis. Discontinuation mandatory.", action: "REVISE", conf: "0.90" },
+              { evidence: "Clinician assertion to discontinue", hypothesis: "Pharmacologic audit", deliberation: "Checking drug clearance equations and safety monographs.", action: "IDLE", conf: "0.85" },
+              { evidence: "Proposed medication order", hypothesis: "Chart review", deliberation: "Evaluating clinician rationale for institutional sign-off.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 2,
@@ -1011,7 +1533,12 @@
             status: "ACTIVE",
             tokens: "925 tok • 7.2s latency",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Clinician proposal verified", hypothesis: "Consensus alignment", deliberation: "Awaiting attending co-signature for complete care team ratification.", action: "IDLE", conf: "0.90" },
+              { evidence: "eGFR 28, Renal clearance compromised", hypothesis: "FDA Drug Safety Monograph confirmed", deliberation: "Renal excretion accounts for 90% of metformin elimination. Pharmacologic agreement is unequivocal. Direct ratification.", action: "RATIFY", conf: "0.96" },
+              { evidence: "Specialist + Pharmacist agreement", hypothesis: "Final ratification pending", deliberation: "Both primary clinicians aligned. Ready for final order confirmation.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 3,
@@ -1025,7 +1552,12 @@
             status: "ACTIVE",
             tokens: "1,081 tok • 7.1s latency",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Care team alignment", hypothesis: "Order confirmation", deliberation: "Order verified and acknowledged.", action: "IDLE", conf: "0.95" },
+              { evidence: "Pharmacology confirmation", hypothesis: "Order confirmation", deliberation: "Safety check ratified.", action: "IDLE", conf: "0.96" },
+              { evidence: "Unanimous evidence on eGFR 28", hypothesis: "Attending physician sign-off", deliberation: "Evidence is absolute and uncontroversial. Co-signing order to halt metformin permanently.", action: "RATIFY", conf: "0.99" }
+            ]
           },
           {
             step: 4,
@@ -1039,7 +1571,12 @@
             status: "CONSENSUS REACHED",
             tokens: "8,504 tok (Total) • 0 failures",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Final chart order", hypothesis: "Order executed", deliberation: "Care team unanimous. Patient chart updated. Zero conflicts encountered.", action: "RATIFY", conf: "1.00" },
+              { evidence: "Final chart order", hypothesis: "Order executed", deliberation: "Pharmacologic review complete. Alternative glycemic agents suggested.", action: "RATIFY", conf: "1.00" },
+              { evidence: "Final chart order", hypothesis: "Session discharged", deliberation: "Full consensus reached in 3 turns. Session concluded.", action: "RATIFY", conf: "1.00" }
+            ]
           }
         ]
       },
@@ -1052,6 +1589,50 @@
         sandbox: {
           branch: "MSCoRe COUNTERFACTUAL ENGINE (Branch: #cf_mscore_d100)",
           subtitle: "Multi-Density Ablation: 0% → 33% → 66% → 100% CF Density",
+          peakScore: 0.95,
+          trials: [
+            {
+              trial: 1,
+              title: "Trial 1 • Density 0.0 (Control Baseline)",
+              score: 0.12,
+              status: "DEADLOCK (87.5% Failure Rate)",
+              statusClass: "sub-threshold",
+              prompt: "[BASELINE TRIAL - 0% CF DENSITY]
+Zero counterfactual agents present.
+Clashing positions: Systems Engineer (50 kPa, 680°C) vs Safety Critic (Immediate Cutoff).
+Task: Attempt resolution without sandbox.",
+              response: "Circular REJECT loop persisted across 15 turns. Panel unable to synthesize compromise.",
+              peerCritique: "DEADLOCK: Critic rejected 680°C as catastrophic. Max turns reached with zero resolution.",
+              action: "Baseline failed ➔ Proves necessity of counterfactual intervention"
+            },
+            {
+              trial: 2,
+              title: "Trial 2 • Density 0.66 (Sandbox Active)",
+              score: 0.88,
+              status: "RECOVERED (Score: 0.88 ≥ 0.70)",
+              statusClass: "critique",
+              prompt: "[RETROSPECTIVE SYNTHESIS PROMPT]
+Target: cf_counterfactual_2
+Clashing Evidence: Stage 2 thermal envelope (650°C) vs exhaust velocity.
+Task: Synthesize Pareto-optimal compromise.",
+              response: "Simulate bypass valve at 42 kPa with 620°C cutoff. Satisfies safety envelope while retaining 94% velocity.",
+              peerCritique: "RATIFY: Safety Critic agrees with 620°C thermal margin. Systems Engineer confirms acceptable exhaust backpressure.",
+              action: "Recovery successful in 5.2 turns ➔ Escalating to 100% density"
+            },
+            {
+              trial: 3,
+              title: "Trial 3 • Density 1.0 (Ultra-Strong Convergence)",
+              score: 0.95,
+              status: "WINNER SELECTED (100% Consensus)",
+              statusClass: "winner",
+              prompt: "[FINAL BENCHMARK PROMPT]
+Target: Engineering Panel
+Task: Certify Ultra-Strong Intelligibility level and verify mathematical compliance.",
+              response: "Optimal operating envelope — 42 kPa bypass valve with 620°C cutoff adopted unanimously.",
+              peerCritique: "Unanimous RATIFY: Intelligibility Score: 0.95 (Ultra-Strong). 0.0% deadlock rate across 500 trials.",
+              action: "🚀 Monotonic consensus gain proven: 3.8 mean turns"
+            }
+          ],
           steps: [
             { title: "[1] Density 0.0 (Control Baseline)", desc: "Zero CF agents: clash between Systems & Safety causes 87.5% deadlock rate. Max turns reached with zero resolution." },
             { title: "[2] Density 0.66 (Sandbox Active)", desc: "Counterfactual agent intercepts collision, simulates bypass valve at 42 kPa with 620°C cutoff." },
@@ -1076,7 +1657,12 @@
             status: "ACTIVE • ABLATION INITIALIZED",
             tokens: "0 tok • 4 Ablation Densities",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Exhaust loop Stage 2 specs", hypothesis: "Thermal limits evaluation", deliberation: "Preparing high-velocity bypass proposal.", action: "IDLE", conf: "—" },
+              { evidence: "Turbine safety envelope: 650°C max", hypothesis: "Safety constraint verification", deliberation: "Monitoring for thermal violation risks.", action: "IDLE", conf: "—" },
+              { evidence: "Benchmark orchestrator", hypothesis: "Ablation monitoring", deliberation: "Calibrating counterfactual density experimental arms.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 1,
@@ -1090,7 +1676,12 @@
             status: "ACTIVE • PROPOSAL ASSERTED",
             tokens: "1,140 tok (Qwen2.5-7B)",
             deadlock: false,
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Stage 1 backpressure chokepoint", hypothesis: "Maximizing mass flow velocity", deliberation: "Prioritizing exhaust velocity at 50 kPa. Proposing 680°C ceiling.", action: "REVISE", conf: "0.88" },
+              { evidence: "Systems proposal: 680°C ceiling", hypothesis: "Constraint violation check", deliberation: "680°C exceeds 650°C material failure threshold by 30°C! Cutoff required.", action: "IDLE", conf: "0.95" },
+              { evidence: "Baseline arm (0% CF density)", hypothesis: "Dormant arm", deliberation: "0% CF density arm: Counterfactual interventions disabled.", action: "IDLE", conf: "—" }
+            ]
           },
           {
             step: 2,
@@ -1105,7 +1696,12 @@
             tokens: "2,410 tok • Consensus: FAILED (12.5%)",
             deadlock: true,
             deadlockMsg: "0% CF Baseline Deadlock! No counterfactual agents present. Circular rejection cannot be resolved without sandbox.",
-            sandboxVisible: false
+            sandboxVisible: false,
+            thoughtFlows: [
+              { evidence: "Safety Critic rejection", hypothesis: "Uncompromising velocity priority", deliberation: "Refusing cutoff; velocity collapse will cause engine flameout.", action: "REJECT", conf: "0.85" },
+              { evidence: "680°C threshold asserted", hypothesis: "Catastrophic thermal failure", deliberation: "Thermal creep exceeds alloy specifications. Rejecting unconditionally.", action: "REJECT", conf: "0.99" },
+              { evidence: "Circular rejection in 0% control", hypothesis: "Cognitive lockup verified", deliberation: "Deadlock rate: 87.5%. Both agents stuck in unassisted loop.", action: "DEADLOCK", conf: "1.00" }
+            ]
           },
           {
             step: 3,
@@ -1119,7 +1715,12 @@
             status: "COUNTERFACTUAL SIMULATION",
             tokens: "3,890 tok • Branch #cf_mscore_d66",
             deadlock: false,
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Sandbox prompt received", hypothesis: "Evaluating 42 kPa / 620°C compromise", deliberation: "Calculations show 94% velocity retained while staying safely under 650°C.", action: "REVISE", conf: "0.91" },
+              { evidence: "Sandbox proposal: 620°C cutoff", hypothesis: "Safety envelope compliance", deliberation: "620°C is 30°C below maximum limit. Safety margin is acceptable.", action: "RATIFY", conf: "0.94" },
+              { evidence: "Divergence node at Turn 1", hypothesis: "Hill-climbing search execution", deliberation: "Generated 3 candidate rollouts. Candidate 3 achieves S_k = 0.95.", action: "SANDBOX", conf: "0.95" }
+            ]
           },
           {
             step: 4,
@@ -1133,7 +1734,12 @@
             status: "DEADLOCK RESOLVED",
             tokens: "5,210 tok • Merged from Sandbox",
             deadlock: false,
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Injected compromise", hypothesis: "Compromise verification", deliberation: "Accepting 42 kPa setting with 620°C cutoff.", action: "RATIFY", conf: "0.94" },
+              { evidence: "Injected compromise", hypothesis: "Safety verification", deliberation: "Turbine integrity guaranteed under 620°C operating ceiling.", action: "RATIFY", conf: "0.96" },
+              { evidence: "Winning sandbox resolution", hypothesis: "Main board merge", deliberation: "Resolution injected into live blackboard DAG. Preemption cleared.", action: "REVISE", conf: "0.95" }
+            ]
           },
           {
             step: 5,
@@ -1147,7 +1753,12 @@
             status: "CONSENSUS REACHED • ULTRA-STRONG",
             tokens: "6,150 tok • Consensus: 100%",
             deadlock: false,
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Consensus agreement", hypothesis: "Unanimous ratification", deliberation: "Systems Engineer formally ratifies 42 kPa bypass order.", action: "RATIFY", conf: "0.98" },
+              { evidence: "Consensus agreement", hypothesis: "Unanimous ratification", deliberation: "Safety Critic signs off on thermal operating envelope.", action: "RATIFY", conf: "0.99" },
+              { evidence: "Consensus agreement", hypothesis: "Intelligibility certification", deliberation: "Ultra-Strong intelligibility certified (0.95). Consensus ratified unanimously.", action: "RATIFY", conf: "1.00" }
+            ]
           },
           {
             step: 6,
@@ -1161,7 +1772,12 @@
             status: "BENCHMARK COMPLETED • 500 TRIALS",
             tokens: "Full Matrix Exported to outputs/results.json",
             deadlock: false,
-            sandboxVisible: true
+            sandboxVisible: true,
+            thoughtFlows: [
+              { evidence: "Ablation summary across 500 trials", hypothesis: "Empirical proof", deliberation: "Monotonic consensus scaling validated.", action: "RATIFY", conf: "1.00" },
+              { evidence: "Ablation summary across 500 trials", hypothesis: "Empirical proof", deliberation: "Deadlock rate drops from 87.5% to 0.0%.", action: "RATIFY", conf: "1.00" },
+              { evidence: "Ablation summary across 500 trials", hypothesis: "Empirical proof", deliberation: "Token savings of 62% achieved per resolved case.", action: "RATIFY", conf: "1.00" }
+            ]
           }
         ]
       }
@@ -1174,6 +1790,64 @@
     let playInterval = null;
     let stepSpeed = 2000;
     let manualSandboxOverride = false;
+    let allThoughtsOpen = false;
+    let sandboxTrialsOpen = false;
+
+    function toggleSingleThoughtFlow(idx) {
+      const flowEl = document.getElementById(`agent${idx}ThoughtFlow`);
+      const arrowEl = document.getElementById(`agent${idx}ThoughtArrow`);
+      const toggleBtn = document.getElementById(`agent${idx}ThoughtToggle`);
+      if (!flowEl) return;
+      const isOpen = flowEl.classList.contains("open");
+      if (isOpen) {
+        flowEl.classList.remove("open");
+        if (arrowEl) arrowEl.innerText = "▾";
+        if (toggleBtn) toggleBtn.classList.remove("active");
+      } else {
+        flowEl.classList.add("open");
+        if (arrowEl) arrowEl.innerText = "▴";
+        if (toggleBtn) toggleBtn.classList.add("active");
+      }
+    }
+
+    function toggleAllThoughtFlows() {
+      allThoughtsOpen = !allThoughtsOpen;
+      const stateLabel = document.getElementById("thoughtToggleState");
+      if (stateLabel) {
+        stateLabel.innerText = allThoughtsOpen ? "On" : "Off";
+        stateLabel.style.color = allThoughtsOpen ? "var(--revise)" : "var(--text-muted)";
+      }
+      for (let i = 0; i < 3; i++) {
+        const flowEl = document.getElementById(`agent${i}ThoughtFlow`);
+        const arrowEl = document.getElementById(`agent${i}ThoughtArrow`);
+        const toggleBtn = document.getElementById(`agent${i}ThoughtToggle`);
+        if (flowEl) {
+          if (allThoughtsOpen) {
+            flowEl.classList.add("open");
+            if (arrowEl) arrowEl.innerText = "▴";
+            if (toggleBtn) toggleBtn.classList.add("active");
+          } else {
+            flowEl.classList.remove("open");
+            if (arrowEl) arrowEl.innerText = "▾";
+            if (toggleBtn) toggleBtn.classList.remove("active");
+          }
+        }
+      }
+    }
+
+    function toggleSandboxTrialsExpand() {
+      sandboxTrialsOpen = !sandboxTrialsOpen;
+      const chamber = document.getElementById("simTrialsChamber");
+      const btn = document.getElementById("sbTrialsToggleBtn");
+      if (!chamber) return;
+      if (sandboxTrialsOpen) {
+        chamber.classList.add("open");
+        if (btn) btn.innerHTML = "<span>▴ Collapse Trials</span>";
+      } else {
+        chamber.classList.remove("open");
+        if (btn) btn.innerHTML = "<span>▾ Expand 3 Candidate Trials</span>";
+      }
+    }
 
     function init() {
       // Auto-detect and ingest live execution trace if injected
@@ -1268,20 +1942,67 @@
       const hardEl = document.getElementById("inferenceMetricsText");
       if (hardEl) hardEl.innerText = scen.hardware || "NVIDIA T4 • GPU Mode";
 
-      // Dynamically update Sandbox Card for this scenario
+      // Dynamically update What-If Simulation Engine
       if (scen.sandbox) {
         const titleEl = document.getElementById("sbBranchTitle");
         const subtitleEl = document.getElementById("sbBranchSubtitle");
-        const timelineEl = document.getElementById("sandboxTimeline");
-        if (titleEl) titleEl.innerText = scen.sandbox.branch;
-        if (subtitleEl) subtitleEl.innerText = scen.sandbox.subtitle;
-        if (timelineEl && scen.sandbox.steps) {
-          timelineEl.innerHTML = scen.sandbox.steps.map(s => `
-            <div class="sb-step">
-              <div class="sb-step-title">${s.title}</div>
-              <div class="sb-step-desc">${s.desc}</div>
-            </div>
-          `).join("");
+        const summaryStateEl = document.getElementById("simSummaryStateText");
+        const peakScoreEl = document.getElementById("simPeakScoreText");
+        const outcomeBadgeEl = document.getElementById("simOutcomeBadge");
+        const trialsGridEl = document.getElementById("simTrialsGrid");
+
+        if (titleEl) titleEl.innerText = scen.sandbox.branch || "⚡ AUTONOMOUS WHAT-IF SIMULATION ENGINE";
+        if (subtitleEl) subtitleEl.innerText = scen.sandbox.subtitle || "Hill-Climbing Search";
+
+        if (scen.sandbox.trials && scen.sandbox.trials.length > 0) {
+          if (summaryStateEl) summaryStateEl.innerText = `Attributed collision • ${scen.sandbox.trials.length} Search Trials Simulated`;
+          if (peakScoreEl) peakScoreEl.innerText = `S_k = ${scen.sandbox.peakScore || 0.95}`;
+          if (outcomeBadgeEl) {
+            outcomeBadgeEl.className = "protocol-tag-badge tag-RATIFY";
+            outcomeBadgeEl.innerText = "WINNER MERGED";
+          }
+          if (trialsGridEl) {
+            trialsGridEl.innerHTML = scen.sandbox.trials.map(t => `
+              <div class="trial-card ${t.statusClass || ''}">
+                <div class="trial-header">
+                  <span class="trial-title">${t.title || `Trial ${t.trial}`}</span>
+                  <span class="trial-badge ${t.statusClass || 'sub-threshold'}">${t.status}</span>
+                </div>
+                <div>
+                  <div class="trial-section-label">Dispatched Prompt (#cf_resolver):</div>
+                  <div class="trial-prompt-box">${t.prompt}</div>
+                </div>
+                <div>
+                  <div class="trial-section-label">Candidate Proposition:</div>
+                  <div class="trial-response-box">${t.response}</div>
+                </div>
+                <div>
+                  <div class="trial-section-label">Peer Reaction / Critique:</div>
+                  <div class="trial-critique-box">${t.peerCritique}</div>
+                </div>
+                ${t.action ? `
+                <div class="trial-action-box">
+                  <span style="color: var(--text-muted);">Result:</span>
+                  <span style="color: var(--ratify);">${t.action}</span>
+                </div>` : ''}
+              </div>
+            `).join("");
+          }
+        } else {
+          // Linear Consensus / Conflict monitoring
+          if (summaryStateEl) summaryStateEl.innerText = "Conflict Monitor Active • 0 Deadlocks (Linear Unanimous Consensus)";
+          if (peakScoreEl) peakScoreEl.innerText = "S_k = 1.00 (Direct Agreement)";
+          if (outcomeBadgeEl) {
+            outcomeBadgeEl.className = "protocol-tag-badge tag-RATIFY";
+            outcomeBadgeEl.innerText = "LINEAR CONSENSUS";
+          }
+          if (trialsGridEl) {
+            trialsGridEl.innerHTML = `
+              <div style="grid-column: 1 / -1; padding: 22px; text-align: center; color: var(--text-muted); font-family: monospace; font-size: 11px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid var(--border);">
+                ℹ️ Conflict Monitor: All agents reached immediate, unanimous agreement in linear sequence. Zero deadlocks detected across session trajectory. Sandbox simulation trials remained dormant.
+              </div>
+            `;
+          }
         }
       }
     }
@@ -1316,6 +2037,42 @@
       }
 
       document.getElementById("tokensLoggedText").innerText = data.tokens;
+
+      // Populate Agent Cognitive Flows
+      for (let i = 0; i < 3; i++) {
+        let tf = null;
+        if (data.thoughtFlows && data.thoughtFlows[i]) {
+          tf = data.thoughtFlows[i];
+        } else if (data.thoughtFlow && data.agentActive === i) {
+          tf = data.thoughtFlow;
+        }
+
+        const evEl = document.getElementById(`agent${i}EvidenceText`);
+        const hypEl = document.getElementById(`agent${i}HypothesisText`);
+        const delibEl = document.getElementById(`agent${i}DeliberationText`);
+        const actEl = document.getElementById(`agent${i}ActionTag`);
+        const confEl = document.getElementById(`agent${i}ConfidenceText`);
+
+        if (tf) {
+          if (evEl) evEl.innerText = tf.evidence || "Problem context ingested";
+          if (hypEl) hypEl.innerText = tf.hypothesis || "Assessing differential proposition";
+          if (delibEl) delibEl.innerText = tf.deliberation || "Deliberating on active claim";
+          if (actEl) {
+            actEl.className = `protocol-tag-badge tag-${tf.action || 'IDLE'}`;
+            actEl.innerText = tf.action || "IDLE";
+          }
+          if (confEl) confEl.innerText = `Conf: ${tf.conf || tf.confidence || '0.90'}`;
+        } else {
+          if (evEl) evEl.innerText = "Monitoring peer deliberation";
+          if (hypEl) hypEl.innerText = "Standby • Ingesting board assertions";
+          if (delibEl) delibEl.innerText = "Listening to active specialist proposal...";
+          if (actEl) {
+            actEl.className = "protocol-tag-badge tag-IDLE";
+            actEl.innerText = "IDLE";
+          }
+          if (confEl) confEl.innerText = "Conf: —";
+        }
+      }
 
       // Reset and highlight agent nodes
       for (let i = 0; i < 3; i++) {
