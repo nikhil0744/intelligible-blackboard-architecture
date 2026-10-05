@@ -1446,8 +1446,12 @@
       }
     }
 
-    // Initialize on load
-    window.addEventListener("DOMContentLoaded", init);
+    // Initialize immediately if DOM is already ready (crucial for Colab/Jupyter dynamic HTML output), or wait for DOMContentLoaded
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      init();
+    } else {
+      window.addEventListener("DOMContentLoaded", init);
+    }
   </script>
 </body>
 </html>
