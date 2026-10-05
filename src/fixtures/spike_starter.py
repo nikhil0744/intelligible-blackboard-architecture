@@ -89,6 +89,13 @@ def run_spike():
 
     print(f"\n[5] Resolution injected back to live board! Total turns now: {len(board.get_entries('main'))}")
     print(f"Deadlock cleared? -> {not board.detect_deadlock(window=2)}")
+    
+    try:
+        from streaming.trace_exporter import export_from_spike_blackboard
+        export_from_spike_blackboard(board, sandbox, winning_turn, output_path="outputs/live_trace.json")
+        print("[+] Exported live execution trace to outputs/live_trace.json")
+    except Exception as e:
+        print(f"[!] Note: Trace export failed: {e}")
     print("=" * 60)
 
 

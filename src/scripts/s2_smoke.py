@@ -71,6 +71,18 @@ def main() -> int:
         u = broker.usage()
         print(f"\nusage: calls={u.calls} failures={u.failures} tokens={u.total_tokens} "
               f"avg_latency={u.total_latency_ms / max(u.calls, 1):.0f}ms")
+        try:
+            from streaming.trace_exporter import export_from_board
+            export_from_board(
+                board=board,
+                session_id=sid,
+                output_path="outputs/live_trace.json",
+                hardware_info=f"{broker.backend.name.upper()} • {broker.default_model}",
+                custom_title=f"Live GPU Run: {task_id} ({args.domain.capitalize()})",
+            )
+            print("[+] Exported live execution trace to outputs/live_trace.json")
+        except Exception as e:
+            print(f"[!] Note: Trace export failed: {e}")
     return 0
 
 

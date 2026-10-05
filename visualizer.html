@@ -615,6 +615,7 @@
 
     <div class="controls-wrapper">
       <select id="scenarioSelect" class="scenario-select" onchange="switchScenario(this.value)">
+        <option value="live" id="liveScenarioOption">🔴 Live Run Trace (outputs/live_trace.json)</option>
         <option value="deadlock">Scenario 1: Deadlock & Sandbox Recovery (Clinical IPF)</option>
         <option value="metformin">Scenario 2: Real Colab GPU Run (Metformin eGFR 28)</option>
         <option value="mscore">Scenario 3: Live Benchmark Ablation (MSCoRe Multi-Density Recovery)</option>
@@ -791,6 +792,43 @@
   <script>
     // SCENARIO DEFINITIONS
     const SCENARIOS = {
+      live: {
+        title: "Live Run Trace (Awaiting Execution)",
+        task: "No live execution trace detected yet. Please run Cell 5, Cell 6, or Cell 7 in your Colab notebook to generate an actual live multi-agent trace!",
+        sessionId: "session_live_pending",
+        hardware: "NVIDIA T4 • Awaiting GPU Inference",
+        sandbox: {
+          branch: "COUNTERFACTUAL SANDBOX (Awaiting Run)",
+          subtitle: "Will populate automatically upon execution",
+          steps: [
+            { title: "[1] Awaiting Execution", desc: "Run a notebook demo cell to capture real live agent thoughts." },
+            { title: "[2] Telemetry Logging", desc: "outputs/live_trace.json will automatically log all decisions." },
+            { title: "[3] Auto-Rendering", desc: "This player will immediately visualize your live session." }
+          ]
+        },
+        agents: [
+          { name: "agent_primary", role: "PRIMARY" },
+          { name: "agent_critic", role: "CRITIC" },
+          { name: "agent_arbiter", role: "ARBITER" }
+        ],
+        steps: [
+          {
+            step: 0,
+            turn: "T0 • AWAITING EXECUTION",
+            narrative: "No live run has been executed yet. Run Cell 5, 6, or 7 in Colab to see real-time thought processes!",
+            agentActive: null,
+            tag: "IDLE",
+            attribution: "System (Ready)",
+            claim: "Awaiting execution of a live notebook demo cell.",
+            rationale: "Once you run a live agent cell, this visualizer will capture and display the exact reasoning steps and thoughts here.",
+            status: "AWAITING RUN",
+            tokens: "0 tok",
+            deadlock: false,
+            sandboxVisible: false
+          }
+        ]
+      },
+
       deadlock: {
         title: "Scenario 1: Deadlock & Sandbox Recovery (Clinical IPF)",
         task: "54-year-old male presents with 6 months of progressive dyspnea on exertion and dry cough. Biapical fine crackles and honeycombing noted.",
@@ -1138,8 +1176,41 @@
     let manualSandboxOverride = false;
 
     function init() {
+      // Auto-detect and ingest live execution trace if injected
+      if (window.LIVE_TRACE_DATA && window.LIVE_TRACE_DATA.steps && window.LIVE_TRACE_DATA.steps.length > 0) {
+        SCENARIOS["live"] = window.LIVE_TRACE_DATA;
+        currentScenarioKey = "live";
+        const opt = document.getElementById("liveScenarioOption");
+        const sel = document.getElementById("scenarioSelect");
+        if (opt && sel) {
+          opt.innerText = `🔴 Live Run: ${window.LIVE_TRACE_DATA.title || 'Latest Execution'}`;
+          sel.value = "live";
+        }
+      } else {
+        // Fallback: attempt asynchronous fetch if running under local webserver
+        checkLiveTraceAsync();
+      }
+
       renderScenarioUI();
       renderStep(0);
+    }
+
+    async function checkLiveTraceAsync() {
+      try {
+        const resp = await fetch("outputs/live_trace.json");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.steps && data.steps.length > 0) {
+            SCENARIOS["live"] = data;
+            const opt = document.getElementById("liveScenarioOption");
+            if (opt) {
+              opt.innerText = `🔴 Live Run: ${data.title || 'Latest Execution'}`;
+            }
+          }
+        }
+      } catch (e) {
+        // Offline / file protocol fallback
+      }
     }
 
     function switchScenario(key) {

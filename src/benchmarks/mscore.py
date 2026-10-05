@@ -499,6 +499,18 @@ def make_live_trial_executor(
             justification="Live multi-agent PEX deliberation.",
         )
 
+        try:
+            from streaming.trace_exporter import export_from_board
+            export_from_board(
+                board=board,
+                session_id=session_id,
+                output_path="outputs/live_trace.json",
+                hardware_info=f"{backend.upper()} • {model} (Density {int(config.counterfactual_density*100)}%)",
+                custom_title=f"Live Benchmark Trial: {config.task_id} ({config.benchmark_name.value})",
+            )
+        except Exception:
+            pass
+
         return TrialResult(
             session_id=session_id,
             benchmark_name=config.benchmark_name,
