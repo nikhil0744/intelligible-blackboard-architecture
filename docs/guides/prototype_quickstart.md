@@ -220,7 +220,7 @@ agent's view away from the currently tracked proposal. Attempts to endorse a
 superseded proposal now trigger a repair request before submission; raw attempts
 and repair reasons remain in the trace.
 
-The prototype's `prototype-v6-calculation-chains` prompt policy explicitly resolves
+The prototype's `prototype-v7-fraction-grouping` prompt policy explicitly resolves
 a conflict with the shared PXP guidance: accepting a sound existing proposal uses
 RATIFY, including when an agent changes its earlier view. REVISE is reserved for
 an actual answer correction or a substantive reasoning correction. Rewording a
@@ -238,6 +238,10 @@ An exact rational calculator checks each declared equality and the final claim.
 Invalid calculations cause a repair request; persistent errors fail the turn.
 This verifies arithmetic consistency, not whether the model chose the right
 expression for the task. References remain evaluator-only.
+Compact fraction operands in a chain can be clarified from an unambiguous
+neighbouring equality; `1/3 / 19/30` is then displayed as `(1/3) / (19/30)`.
+The interpretation is recorded in the trace. Bare ambiguous calculations still
+need explicit parentheses, and incorrect arithmetic continues to cause repair.
 
 If you already uploaded an older source ZIP to Colab:
 
@@ -249,8 +253,8 @@ If you already uploaded an older source ZIP to Colab:
 4. Rerun **Persist results and check inference**, then launch a fresh one-question
    compute run and its viewer. Do not reuse or overwrite the old results.
 5. Check the new `manifest.json` contains
-   `"prompt_policy": "prototype-v6-calculation-chains"` for ordinary runs, or
-   `"prompt_policy": "prototype-recovery-v6-calculation-chains"` for recovery.
+   `"prompt_policy": "prototype-v7-fraction-grouping"` for ordinary runs, or
+   `"prompt_policy": "prototype-recovery-v7-fraction-grouping"` for recovery.
 
 If the trace still alternates, inspect the actual claims and rationales. Repeated
 correct proposals without ratifications are an agreement failure; repeated

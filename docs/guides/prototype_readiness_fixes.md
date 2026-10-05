@@ -77,7 +77,7 @@ Follow-up: the prototype prompt now explicitly overrides the shared instruction
 to revise when persuaded. Accepting a sound existing proposal uses RATIFY; a new
 answer or substantive reasoning correction uses REVISE. Numerical verification
 requires solving and substituting into all original constraints. The manifest
-records this policy as `prototype-v6-calculation-chains`. Numerical posts now
+records this policy as `prototype-v7-fraction-grouping`. Numerical posts now
 require exact-calculator-checked `CALC` evidence; false equalities and stale
 ratifications trigger repair before commitment. The runner still cannot
 guarantee model correctness and does not supply reference answers to agents.

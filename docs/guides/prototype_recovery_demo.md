@@ -160,7 +160,7 @@ written incrementally or exported as in the ordinary prototype.
 Independent calculations are recorded as `independent_analysis` events rather
 than board contributions; their calls count under the `independent_verification`
 usage phase. The current recovery prompt policy is
-`prototype-recovery-v6-calculation-chains` and the report includes the number of
+`prototype-recovery-v7-fraction-grouping` and the report includes the number of
 independent checks. They reduce exposure to copied arithmetic errors but cannot
 guarantee mathematical correctness from the shared model.
 
@@ -203,6 +203,18 @@ denominator cannot hide an earlier explicitly stated arithmetic error behind a
 tautological check such as `CALC: 1/19 = 1/19`. Symbolic labels themselves are
 not interpreted; assumptions and unreported intermediate steps still need model
 reasoning and independent grading.
+
+Compact fraction notation can also be disambiguated by the whole equality chain.
+For example, `1/3 / (9/30 + 10/30) = 1/3 / 19/30 = 10/19` is accepted by
+interpreting the middle step as `(1/3) / (19/30)`. At least one unambiguous
+neighbouring expression must anchor the interpretation, and every step in that
+numeric run must agree. The checker does not choose a grouping from the prediction
+or reference answer. It records `fraction_operands_disambiguated_from_chain` and
+the clarified expressions in contribution metadata; the viewer shows those
+expressions under Calculator checks. Original model text is retained.
+Bare ambiguous expressions must be parenthesized, and fully compact slash
+sequences such as `1/3/19/30` retain standard left-to-right arithmetic rather
+than guessing which slash separates the two fractions.
 
 Older source bundles accepted only the resolver's original sandbox proposal.
 They could report `sandbox_not_approved` even after peers corrected `2/3` to

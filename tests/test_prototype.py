@@ -117,7 +117,7 @@ def test_prototype_requests_reasoning_before_prediction_and_tag(tmp_path):
     requests = [c for c in broker.backend.calls if c.agent_id != "_preflight"]
     order = ["explanation", "prediction", "tag", "target_contribution_id"]
     assert all(list(c.json_schema["properties"]) == order for c in requests)
-    assert result["manifest"]["prompt_policy"] == "prototype-v6-calculation-chains"
+    assert result["manifest"]["prompt_policy"] == "prototype-v7-fraction-grouping"
     assert all(a["reasoning_first"] for a in result["manifest"]["agents"])
     original = decision_json_schema()
     reordered = decision_json_schema(reasoning_first=True)

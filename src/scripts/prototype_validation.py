@@ -14,7 +14,7 @@ from agents.base import PEXAgent
 from contracts.schemas import PXPTag
 from prompts.validation import DecisionSemanticError, normalize_claim
 
-VALIDATION_POLICY = "exact-arithmetic-and-current-proposal-v2"
+VALIDATION_POLICY = "exact-arithmetic-and-current-proposal-v3"
 CALC_INSTRUCTIONS = (
     "For every purely numerical prediction.claim, include at least one evidence string "
     "formatted CALC: <arithmetic expression> = <result>. Use only numbers, parentheses, "
@@ -23,6 +23,9 @@ CALC_INSTRUCTIONS = (
     "but every equality must be true. A bare CALC: expression is also accepted; the calculator "
     "computes its value. Square grouping brackets and the symbols ×, ÷, − are supported. "
     "Keep symbolic labels and prose outside CALC entries. "
+    "Compact fraction operands separated by a spaced division, such as 1/3 / 19/30, "
+    "can be clarified from an unambiguous neighbouring equality. Explicit parentheses "
+    "are preferred. Ambiguous notation alone is never resolved from prediction.claim. "
     "Numeric equality steps elsewhere in evidence will also be checked, including "
     "steps following a symbolic label. Show normalization sums before substituting "
     "their values into the final division. Do not present false equalities as evidence; "
@@ -35,6 +38,44 @@ CALC_INSTRUCTIONS = (
     "Keep the rationale concise so there is room for the CALC evidence in the JSON. "
 )
 _NUMBER = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\s*/\s*[+-]?\d+)?\Z")
+_COMPACT_FRACTION = re.compile(r"(?<![\w.])(?:\d+(?:\.\d*)?|\.\d+)/(?:\d+(?:\.\d*)?|\.\d+)(?![\w.])")
+
+
+def fraction_operands(expression: str) -> str:
+    """Parenthesize compact fractions separated by spaces/operators.
+
+    Preserve fully compact slash sequences such as 1/3/19/30: there is no
+    lexical evidence of which slashes separate fraction operands.
+    """
+    expression = expression.strip().translate(str.maketrans({"×": "*", "÷": "/", "−": "-"}))
+    spans = []
+    for match in _COMPACT_FRACTION.finditer(expression):
+        start, end = match.span()
+        if start and expression[start - 1] == "/" and (start < 2 or not expression[start - 2].isspace()):
+            continue
+        if end < len(expression) and expression[end] == "/" and (end + 1 == len(expression) or not expression[end + 1].isspace()):
+            continue
+        spans.append((start, end))
+    for start, end in reversed(spans):
+        expression = expression[:start] + "(" + expression[start:end] + ")" + expression[end:]
+    return expression
+
+
+def expression_options(expression: str):
+    """Standard arithmetic plus a bounded compact-fraction interpretation."""
+    primary = exact_value(expression)
+    options = {primary: expression}
+    grouped = fraction_operands(expression)
+    if grouped != expression:
+        try:
+            alternative = exact_value(grouped)
+        except ValueError:
+            # Disambiguation cannot bypass the calculator's bounds/operators.
+            pass
+        else:
+            if alternative != primary:
+                options[alternative] = grouped
+    return primary, options
 
 
 def exact_value(expression: str) -> Fraction:
@@ -92,19 +133,47 @@ def checked_calculations(decision):
                 if not explicit:
                     continue
                 raise ValueError("a CALC entry may contain at most 16 expressions and 4096 characters")
-            values = []
+            values, options = [], []
             for part in parts:
                 try:
-                    values.append(exact_value(part))
+                    primary, alternatives = expression_options(part)
+                    values.append(primary)
+                    options.append(alternatives)
                 except ValueError:
                     if explicit:
                         raise
                     # Labels such as P(D2|H3) are not numeric expressions. Audit
                     # the adjacent numeric steps without interpreting the label.
                     values.append(None)
+                    options.append(None)
         except ValueError as exc:
             raise DecisionSemanticError("invalid_calculation", f"Invalid CALC entry: {exc}. Use numeric expressions only, e.g. CALC: (numeric expression) = result. Omit symbolic labels and prose.") from exc
+        # A single, unambiguous value must anchor each numeric equality run.
+        # Resolve the whole run together, never fit each pair independently or
+        # select a grouping from the final prediction/reference answer.
+        resolved = list(parts)
+        start = 0
+        while start < len(parts):
+            if options[start] is None:
+                start += 1
+                continue
+            end = start + 1
+            while end < len(parts) and options[end] is not None:
+                end += 1
+            candidates = set(options[start])
+            for alternatives in options[start + 1:end]:
+                candidates.intersection_update(alternatives)
+            if len(candidates) == 1 and any(len(alternatives) == 1 for alternatives in options[start:end]):
+                chosen = next(iter(candidates))
+                for index in range(start, end):
+                    values[index] = chosen
+                    resolved[index] = options[index][chosen]
+            start = end
         if explicit and len(parts) == 1:
+            if len(options[0]) > 1:
+                raise DecisionSemanticError("ambiguous_fraction_notation",
+                    "A bare CALC has ambiguous fraction grouping. Parenthesize both fraction operands "
+                    "or include an unambiguous neighbouring equality. Do not choose a grouping merely to match prediction.claim.")
             checks.append({"expression": parts[0], "value": str(values[0])})
         for index in range(len(parts) - 1):
             expression, stated = parts[index:index + 2]
@@ -116,7 +185,12 @@ def checked_calculations(decision):
                     f"Exact calculator: {expression} = {actual}, not {stated}. "
                     "Recheck your calculation, rationale and prediction.claim, then choose the appropriate tag and current target. "
                     "The calculator verifies the expression you supplied; it does not choose the expression for you.")
-            (checks if explicit else supporting_checks).append({"expression": expression, "value": str(actual)})
+            check = {"expression": expression, "value": str(actual)}
+            if resolved[index] != expression:
+                check["normalized_expression"] = resolved[index]
+            if resolved[index + 1] != stated:
+                check["normalized_next_expression"] = resolved[index + 1]
+            (checks if explicit else supporting_checks).append(check)
     claim = normalize_claim(decision.prediction.claim)
     if _NUMBER.fullmatch(claim):
         if not checks:
@@ -154,7 +228,9 @@ class PrototypeAgent(PEXAgent):
                     f"RATIFY must endorse the current proposal id={active.contribution_id if active else 'none'}, "
                     f"claim={active.prediction if active else 'none'}, not a superseded proposal or criticism. "
                     "Check its arithmetic and rationale; RATIFY that id only if you agree, otherwise REVISE or criticize it.")
-        checked_calculations(decision)
+        checks = checked_calculations(decision)
+        if any("normalized_expression" in c or "normalized_next_expression" in c for c in checks):
+            normalizations.append("fraction_operands_disambiguated_from_chain")
         return decision, normalizations
 
     def to_contribution(self, snapshot, decision, *args, **kwargs):

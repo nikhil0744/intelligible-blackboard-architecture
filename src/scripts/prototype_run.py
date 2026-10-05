@@ -35,7 +35,7 @@ from scripts.prototype_artifacts import export_artifacts
 from scripts.prototype_validation import CALC_INSTRUCTIONS, VALIDATION_POLICY, PrototypeAgent
 
 
-PROMPT_POLICY = "prototype-v6-calculation-chains"
+PROMPT_POLICY = "prototype-v7-fraction-grouping"
 
 
 def turn_instructions(active: AgentContribution | None) -> str:

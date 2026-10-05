@@ -95,6 +95,23 @@ def test_immediate_agreement_does_not_invent_conflict_or_call_resolver(tmp_path)
     assert saved["outcome"] == "ordinary_agreement" and saved["correct"]
 
 
+def test_reported_fraction_grouping_failure_now_creates_valid_posts(tmp_path):
+    def answer_with_reported_chain(req):
+        if req.agent_id == "_preflight": return '{"ok":true}'
+        active = re.search(r"The active proposal is id=([^,]+), claim=", req.messages[0].content)
+        data = json.loads(decision("RATIFY" if active else "REVISE", "10/19", active[1] if active else None))
+        data["explanation"]["evidence"] = ["CALC: 1/3 / (9/30 + 10/30) = 1/3 / 19/30 = 10/19"]
+        return json.dumps(data)
+    result, broker, rows = run(tmp_path, answer_with_reported_chain)
+    assert result["exit_code"] == 0 and not result["report"]["triggered"]
+    posts = [e["contribution"] for e in rows if e["type"] == "contribution"]
+    assert len(posts) == 4 and all(c["payload"]["prediction"]["claim"] == "10/19" for c in posts)
+    assert all(c["metadata"]["parse_attempts"] == 1 for c in posts)
+    assert all("fraction_operands_disambiguated_from_chain" in c["metadata"]["normalizations"] for c in posts)
+    saved = prototype_artifacts.read_jsonl(tmp_path / "run" / "results.jsonl")[0]
+    assert saved["correct"] and saved["answer_agreement"] and saved["usage"]["repairs"] == 0
+
+
 def test_strict_stall_trigger_waits_for_three_conflicting_turns(tmp_path):
     result, _, rows = run(tmp_path, debate(), trigger="stall")
     assert result["report"]["trigger_observed"] == "three_conflicting_critiques"
@@ -207,7 +224,7 @@ def test_independent_checks_hide_history_and_counter_a_copied_criticism(tmp_path
         "general_reasoner", "general_critic", "prototype_verifier"}
     assert all(e["prediction"] == "10/19" for e in checks)
     assert sum(c.phase == "independent_verification" for c in broker.ledger.records()) == 6
-    assert result["manifest"]["prompt_policy"] == "prototype-recovery-v6-calculation-chains"
+    assert result["manifest"]["prompt_policy"] == "prototype-recovery-v7-fraction-grouping"
 
 
 def test_reference_changes_do_not_change_inference_inputs(tmp_path):

@@ -30,7 +30,7 @@ from scripts.prototype_validation import VALIDATION_POLICY, PrototypeAgent
 from scripts.prototype_run import AgreementTracker, PROMPT_POLICY, PrototypeTask, RunWriter, TrialOutcome, grade, load_inputs, make_panel, revision, turn_instructions
 
 RESOLVER = "counterfactual_resolver"
-RECOVERY_PROMPT_POLICY = "prototype-recovery-v6-calculation-chains"
+RECOVERY_PROMPT_POLICY = "prototype-recovery-v7-fraction-grouping"
 
 
 def resolver_agent(broker, settings, seed):

@@ -115,6 +115,57 @@ def test_correct_labelled_evidence_is_checked_without_binding_claim_to_supportin
     assert [check["value"] for check in checks] == ["19/30", "10/19", "10/19"]
 
 
+@pytest.mark.parametrize("expression,claim", [
+    ("1/3 / (9/30 + 10/30) = 1/3 / 19/30 = 10/19", "10/19"),
+    ("1/3 / (9/30 + 10/30) = 1/3 /19/30 = 10/19", "10/19"),
+    ("(1/3) / 19/30 = (1/3)/(19/30) = 10/19", "10/19"),
+    ("1/3 ÷ 19/30 = (1/3) ÷ (19/30) = 10/19", "10/19"),
+    ("2/5 / 3/7 = (2/5) / (3/7) = 14/15", "14/15"),
+    ("6/2 / 3/4 = 4", "4"),
+])
+def test_fraction_operands_are_disambiguated_from_the_whole_chain(expression, claim):
+    data = output(claim, ["CALC: " + expression])
+    backend = MockBackend(responses=[json.dumps(data)])
+    agent = PrototypeAgent("a", "general_reasoner", ModelBroker(backend, "test"))
+    result = agent.act(InMemoryBoard().create_session("t", "Q"))
+    assert result.prediction == claim and result.metadata["parse_attempts"] == 1
+    assert result.metadata["raw_responses"] == [json.dumps(data)]
+    assert result.metadata["normalizations"] == ["fraction_operands_disambiguated_from_chain"]
+    assert any("normalized_expression" in c or "normalized_next_expression" in c
+               for c in result.metadata["arithmetic_checks"])
+
+
+def test_disambiguation_also_checks_labelled_evidence():
+    data = output(evidence=[
+        "P(D2|H3) = 1/3 / (9/30 + 10/30) = 1/3 / 19/30 = 10/19",
+        "CALC: (1/3)/(19/30) = 10/19",
+    ])
+    assert all(c["value"] == "10/19" for c in checked_calculations(AgentDecision.model_validate(data)))
+
+
+@pytest.mark.parametrize("claim,evidence,code", [
+    ("1/19", "1/3 / 19/30 = 1/19", "arithmetic_mismatch"),
+    ("1/19", "1/3 / (9/30 + 10/30) = 1/3 / 19/30 = 10/19", "calculation_claim_mismatch"),
+    ("10/19", "1/3 / 19/30 = 10/19 = 1/1710", "arithmetic_mismatch"),
+    ("10/19", "1/3/19/30 = 10/19", "arithmetic_mismatch"),
+    ("10/19", "1/3 / 19/30", "ambiguous_fraction_notation"),
+])
+def test_disambiguation_does_not_fit_false_equalities_or_prediction(claim, evidence, code):
+    with pytest.raises(DecisionSemanticError) as exc:
+        checked_calculations(AgentDecision.model_validate(output(claim, ["CALC: " + evidence])))
+    assert exc.value.code == code
+
+
+def test_explicit_and_standard_division_remain_unchanged():
+    assert exact_value("1/3 / 19/30") == Fraction(1, 1710)
+    data = output("1/1710", ["CALC: 1/3 / 19/30 = 1/1710"])
+    checks = checked_calculations(AgentDecision.model_validate(data))
+    assert checks == [{"expression": "1/3 / 19/30", "value": "1/1710"}]
+    # Explicitly grouped input cannot be reinterpreted to fit a wrong result.
+    with pytest.raises(DecisionSemanticError):
+        checked_calculations(AgentDecision.model_validate(output("1/1710", ["CALC: (1/3) / (19/30) = 1/1710"])))
+
+
 def test_false_equality_is_reprompted_and_raw_evidence_preserved():
     bad = output("1/19", ["CALC: (1/3) / (19/30) = 1/19"])
     backend = MockBackend(responses=[json.dumps(bad), json.dumps(output())])
