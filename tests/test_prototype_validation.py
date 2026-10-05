@@ -140,6 +140,45 @@ def test_persistent_bad_arithmetic_fails_without_silent_answer_replacement():
     assert all(reason.startswith("arithmetic_mismatch") for reason in exc.value.repair_reasons)
 
 
+def ratify_after_checked_proposal(evidence):
+    board = InMemoryBoard()
+    sid = board.create_session("t", "Q").session_id
+    proposer = PrototypeAgent("p", "general_reasoner", ModelBroker(MockBackend(responses=[json.dumps(
+        output("0.05", ["CALC: (1.10 - 1.00) / 2 = 0.05"]))]), "test"))
+    board.submit(proposer.act(board.get_snapshot(sid)))
+    snapshot = board.get_snapshot(sid)
+    vote = output("0.05", evidence, tag="RATIFY", target=snapshot.contributions[0].contribution_id)
+    return PrototypeAgent("v", "general_critic", ModelBroker(MockBackend(responses=[json.dumps(vote)]), "test")), snapshot
+
+
+@pytest.mark.parametrize("evidence", [
+    # Observed live Qwen ratifications that previously exhausted all attempts.
+    ["The total cost is x + (x + 1.00) = 1.10.", "Dividing by 2, x = 0.05."],
+    ["Simplifying, 2x + 1.00 = 1.10.", "CALC: 2x + 1.00 = 1.10 -> 2x = 0.10 -> x = 0.05"],
+    ["CALC: (0.10 / 2) = 0.05"],
+])
+def test_ratification_of_a_checked_proposal_need_not_reprove_it(evidence):
+    agent, snapshot = ratify_after_checked_proposal(evidence)
+    result = agent.act(snapshot)
+    assert result.tag.value == "RATIFY" and result.prediction == "0.05"
+    assert result.metadata["repair_reasons"] == []
+
+
+@pytest.mark.parametrize("evidence", [["CALC: (1.10 - 1.00) / 2 = 0.5"], ["0.10 / 2 = 0.5"]])
+def test_false_arithmetic_in_a_ratification_is_still_rejected(evidence):
+    agent, snapshot = ratify_after_checked_proposal(evidence)
+    with pytest.raises(AgentTurnError) as exc:
+        agent.act(snapshot)
+    assert all(reason.startswith("arithmetic_mismatch") for reason in exc.value.repair_reasons)
+
+
+def test_new_numerical_proposals_still_require_numeric_calc():
+    algebra = output("0.05", ["CALC: 2x + 1.00 = 1.10 -> 2x = 0.10 -> x = 0.05"])
+    with pytest.raises(DecisionSemanticError) as exc:
+        checked_calculations(AgentDecision.model_validate(algebra))
+    assert exc.value.code == "invalid_calculation"
+
+
 def test_legacy_agents_keep_their_original_validation_contract():
     backend = MockBackend(responses=[json.dumps(output("5", []))])
     agent = PEXAgent("a", "general_reasoner", ModelBroker(backend, "test"))

@@ -207,7 +207,7 @@ def test_independent_checks_hide_history_and_counter_a_copied_criticism(tmp_path
         "general_reasoner", "general_critic", "prototype_verifier"}
     assert all(e["prediction"] == "10/19" for e in checks)
     assert sum(c.phase == "independent_verification" for c in broker.ledger.records()) == 6
-    assert result["manifest"]["prompt_policy"] == "prototype-recovery-v6-calculation-chains"
+    assert result["manifest"]["prompt_policy"] == "prototype-recovery-v7-checked-ratify"
 
 
 def test_reference_changes_do_not_change_inference_inputs(tmp_path):

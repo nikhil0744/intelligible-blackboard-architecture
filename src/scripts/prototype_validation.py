@@ -14,7 +14,7 @@ from agents.base import PEXAgent
 from contracts.schemas import PXPTag
 from prompts.validation import DecisionSemanticError, normalize_claim
 
-VALIDATION_POLICY = "exact-arithmetic-and-current-proposal-v2"
+VALIDATION_POLICY = "exact-arithmetic-and-current-proposal-v3"
 CALC_INSTRUCTIONS = (
     "For every purely numerical prediction.claim, include at least one evidence string "
     "formatted CALC: <arithmetic expression> = <result>. Use only numbers, parentheses, "
@@ -22,7 +22,8 @@ CALC_INSTRUCTIONS = (
     "A chain such as CALC: expression = intermediate expression = result is allowed, "
     "but every equality must be true. A bare CALC: expression is also accepted; the calculator "
     "computes its value. Square grouping brackets and the symbols ×, ÷, − are supported. "
-    "Keep symbolic labels and prose outside CALC entries. "
+    "Keep symbolic labels, variables and prose outside CALC entries: substitute the numbers, "
+    "e.g. write CALC: (12 - 4) / 2 = 4 rather than CALC: 2x = 8 -> x = 4. "
     "Numeric equality steps elsewhere in evidence will also be checked, including "
     "steps following a symbolic label. Show normalization sums before substituting "
     "their values into the final division. Do not present false equalities as evidence; "
@@ -30,6 +31,8 @@ CALC_INSTRUCTIONS = (
     "The expression must derive the answer from the task's quantities, not merely repeat "
     "the answer. The last CALC result must equal prediction.claim exactly. "
     "For nonnumeric answers, include CALC entries for any supporting arithmetic. "
+    "A RATIFY restates a proposal whose CALC evidence was already checked, so it needs no new "
+    "CALC entry; any arithmetic you do include is still checked. "
     "All CALC equalities will be checked with an exact rational calculator before posting. "
     "False calculations must be corrected, not copied. This checks arithmetic, not assumptions. "
     "Keep the rationale concise so there is room for the CALC evidence in the JSON. "
@@ -80,12 +83,18 @@ def exact_value(expression: str) -> Fraction:
 
 
 def checked_calculations(decision):
+    # A RATIFY must restate the current proposal's claim exactly, and that proposal's
+    # CALC evidence was checked when it was posted. Re-proving it is not required, and
+    # algebraic working (2x = 0.10) in a ratification is a label, not an error. Any
+    # numeric equality it does state is still checked.
+    endorsement = decision.tag == PXPTag.RATIFY
     checks, supporting_checks = [], []
     for entry in decision.explanation.evidence:
-        explicit = entry.strip().upper().startswith("CALC:")
+        prefixed = entry.strip().upper().startswith("CALC:")
+        explicit = prefixed and not endorsement
         if not explicit and "=" not in entry:
             continue
-        equation = entry.strip()[5:].strip() if explicit else entry.strip()
+        equation = entry.strip()[5:].strip() if prefixed else entry.strip()
         try:
             parts = [part.strip() for part in equation.split("=")]
             if len(parts) > 16 or len(equation) > 4096:
@@ -118,11 +127,12 @@ def checked_calculations(decision):
                     "The calculator verifies the expression you supplied; it does not choose the expression for you.")
             (checks if explicit else supporting_checks).append({"expression": expression, "value": str(actual)})
     claim = normalize_claim(decision.prediction.claim)
-    if _NUMBER.fullmatch(claim):
+    if _NUMBER.fullmatch(claim) and not endorsement:
         if not checks:
             raise DecisionSemanticError("missing_calculation",
                 "A numerical prediction needs evidence containing CALC: <expression using the task quantities> = <result>. "
-                "Include the final computation, with fractions parenthesized; the last result must equal prediction.claim.")
+                "Include the final computation, with fractions parenthesized; the last result must equal prediction.claim. "
+                "Write numbers, not variables: e.g. CALC: (12 - 4) / 2 = 4, not CALC: 2x = 8 -> x = 4.")
         try:
             claim_value = exact_value(claim)
         except ValueError as exc:

@@ -220,7 +220,7 @@ agent's view away from the currently tracked proposal. Attempts to endorse a
 superseded proposal now trigger a repair request before submission; raw attempts
 and repair reasons remain in the trace.
 
-The prototype's `prototype-v6-calculation-chains` prompt policy explicitly resolves
+The prototype's `prototype-v7-checked-ratify` prompt policy explicitly resolves
 a conflict with the shared PXP guidance: accepting a sound existing proposal uses
 RATIFY, including when an agent changes its earlier view. REVISE is reserved for
 an actual answer correction or a substantive reasoning correction. Rewording a
@@ -249,8 +249,8 @@ If you already uploaded an older source ZIP to Colab:
 4. Rerun **Persist results and check inference**, then launch a fresh one-question
    compute run and its viewer. Do not reuse or overwrite the old results.
 5. Check the new `manifest.json` contains
-   `"prompt_policy": "prototype-v6-calculation-chains"` for ordinary runs, or
-   `"prompt_policy": "prototype-recovery-v6-calculation-chains"` for recovery.
+   `"prompt_policy": "prototype-v7-checked-ratify"` for ordinary runs, or
+   `"prompt_policy": "prototype-recovery-v7-checked-ratify"` for recovery.
 
 If the trace still alternates, inspect the actual claims and rationales. Repeated
 correct proposals without ratifications are an agreement failure; repeated

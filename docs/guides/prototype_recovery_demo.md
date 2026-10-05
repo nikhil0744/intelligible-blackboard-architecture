@@ -160,7 +160,7 @@ written incrementally or exported as in the ordinary prototype.
 Independent calculations are recorded as `independent_analysis` events rather
 than board contributions; their calls count under the `independent_verification`
 usage phase. The current recovery prompt policy is
-`prototype-recovery-v6-calculation-chains` and the report includes the number of
+`prototype-recovery-v7-checked-ratify` and the report includes the number of
 independent checks. They reduce exposure to copied arithmetic errors but cannot
 guarantee mathematical correctness from the shared model.
 
@@ -180,6 +180,9 @@ that differs from the last checked calculation. The model receives the exact
 calculation result and must repair its JSON before it can post. This applies to
 ordinary discussion, the resolver, private calculations, sandbox peers and live
 confirmation. The viewer shows checked calculations on accepted contributions.
+A RATIFY must restate the current proposal's already-checked claim, so it does not
+need its own `CALC` entry; algebraic working in it is treated as a label, and any
+numeric equality it states is still checked.
 
 Ratifications must resolve to the current proposal through a valid endorsement
 chain. Endorsing an old criticism or superseded proposal now causes a repair

@@ -77,9 +77,13 @@ Follow-up: the prototype prompt now explicitly overrides the shared instruction
 to revise when persuaded. Accepting a sound existing proposal uses RATIFY; a new
 answer or substantive reasoning correction uses REVISE. Numerical verification
 requires solving and substituting into all original constraints. The manifest
-records this policy as `prototype-v6-calculation-chains`. Numerical posts now
+records this policy as `prototype-v7-checked-ratify`. Numerical posts now
 require exact-calculator-checked `CALC` evidence; false equalities and stale
-ratifications trigger repair before commitment. The runner still cannot
+ratifications trigger repair before commitment. A RATIFY restates a proposal whose
+`CALC` evidence was already checked, so it does not have to re-prove it; any numeric
+equality it states is still checked. (Requiring a new `CALC` line on every
+ratification made agents that agreed exhaust their repair attempts, because the
+model wrote its check as algebra such as `2x = 0.10`.) The runner still cannot
 guarantee model correctness and does not supply reference answers to agents.
 
 **Acceptance check:** two voters cannot complete agreement; votes on different proposals cannot combine; a revised proposal cannot inherit old votes; an incorrect unanimous answer remains incorrect when graded.
