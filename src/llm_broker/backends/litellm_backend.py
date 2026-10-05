@@ -19,7 +19,7 @@ class LiteLLMBackend:
         try:
             import litellm  # noqa: F401
         except ImportError as e:  # pragma: no cover
-            raise LLMError("litellm not installed: pip install -r requirements-s2.txt") from e
+            raise LLMError("litellm not installed: pip install blackboard-agents[litellm]") from e
         self.api_base = api_base
         self.timeout_s = timeout_s
 

@@ -10,7 +10,7 @@ Demonstrates:
 """
 
 import json
-from pathlib import Path
+from importlib.resources import files
 from contracts.schemas import BlackboardEntry, PXPTag
 from blackboard.store import InMemoryBlackboard
 from fixtures.mocks import MockLLMBroker, MockPEXAgent
@@ -22,8 +22,8 @@ def run_spike():
     print("=" * 60)
 
     # 1. Load the recorded deadlock scenario
-    fixture_file = Path(__file__).parent / "sample_deadlocks.json"
-    with open(fixture_file, "r") as f:
+    fixture_file = files("fixtures").joinpath("sample_deadlocks.json")
+    with fixture_file.open("r") as f:
         data = json.load(f)
 
     board = InMemoryBlackboard(

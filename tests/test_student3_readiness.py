@@ -9,7 +9,7 @@ Validates that all minimum prerequisites for Student 3 are operational:
 """
 
 import json
-from pathlib import Path
+from importlib.resources import files
 import pytest
 from contracts.schemas import BlackboardEntry, BlackboardState, PXPTag
 from blackboard.store import InMemoryBlackboard
@@ -73,8 +73,8 @@ def test_blackboard_cloning_and_sandbox_branching():
 
 def test_fixture_deadlock_detection_and_resolution():
     """Load sample deadlock fixture, detect deadlock, and simulate counterfactual resolution."""
-    fixture_path = Path(__file__).parent.parent / "fixtures" / "sample_deadlocks.json"
-    with open(fixture_path, "r") as f:
+    fixture_path = files("fixtures").joinpath("sample_deadlocks.json")
+    with fixture_path.open("r") as f:
         fixture_data = json.load(f)
 
     # Initialize blackboard from fixture

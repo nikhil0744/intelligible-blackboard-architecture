@@ -170,7 +170,7 @@ def plot_intelligibility_progression(
 
 def generate_all_ablation_plots(
     data: Union[pd.DataFrame, List[TrialResult]],
-    output_dir: Union[str, Path] = "analytics/figures",
+    output_dir: Union[str, Path] = "outputs/figures",
 ) -> Dict[str, Path]:
     """Generate all standard research figures and return their file paths."""
     df = summarize_results(data) if isinstance(data, list) else data

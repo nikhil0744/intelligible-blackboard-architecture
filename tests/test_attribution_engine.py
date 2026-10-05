@@ -10,7 +10,7 @@ Verifies:
 """
 
 import json
-from pathlib import Path
+from importlib.resources import files
 from contracts.schemas import BlackboardEntry, BlackboardState, PXPTag
 from blackboard.store import InMemoryBlackboard
 from counterfactual.attribution import (
@@ -20,12 +20,8 @@ from counterfactual.attribution import (
 
 
 def load_clinical_fixture() -> BlackboardState:
-    fixture_path = (
-        Path(__file__).resolve().parent.parent
-        / "fixtures"
-        / "sample_deadlocks.json"
-    )
-    with open(fixture_path, "r", encoding="utf-8") as f:
+    fixture_path = files("fixtures").joinpath("sample_deadlocks.json")
+    with fixture_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     return BlackboardState.model_validate(data)
 

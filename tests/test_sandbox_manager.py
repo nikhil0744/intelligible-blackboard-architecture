@@ -4,7 +4,7 @@ Comprehensive unit tests for SandboxSession and SandboxManager.
 """
 
 import json
-from pathlib import Path
+from importlib.resources import files
 import pytest
 
 from contracts.schemas import BlackboardEntry, PXPTag
@@ -423,8 +423,8 @@ def test_session_cleanup(manager, live_debate):
 
 def test_fixture_sample_deadlock_session(manager):
     """Test creating a sandbox session from sample_deadlocks.json fixture."""
-    fixture_path = Path("fixtures/sample_deadlocks.json")
-    with open(fixture_path, "r", encoding="utf-8") as f:
+    fixture_path = files("fixtures").joinpath("sample_deadlocks.json")
+    with fixture_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     board = InMemoryBlackboard(
