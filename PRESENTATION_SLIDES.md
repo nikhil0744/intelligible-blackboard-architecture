@@ -1,12 +1,12 @@
 # Intelligible Multi-Agent Blackboard Architecture
-## Deliberative Collaboration, Conflict Detection & Counterfactual Resolution in Complex Domains
+## Explainable Collaboration & Conflict Resolution in Multi-Agent AI
 
 ---
 
 # Slide 1: Title Slide
 
 ### Intelligible Multi-Agent Blackboard Architecture
-**Sub-title:** Deliberative Collaboration, Conflict Detection & Counterfactual Resolution in Complex Domains
+**Sub-title:** Explainable Collaboration & Self-Healing Conflict Resolution in Multi-Agent AI
 
 **Presented by:**
 - Amithav C
@@ -14,79 +14,84 @@
 - Nikhil Palakollu
 - Harish K
 
-**Domain:** Multi-Agent AI Systems • Healthcare Decision Support • LLM Reasoning
+**Focus Areas:** Multi-Agent AI • Clinical Decision Support • System Explainability
 
-> **Presenter Note:** "Good morning everyone. Today we present our project: an Intelligible Multi-Agent Blackboard Architecture for collaborative, explainable reasoning in complex, high-stakes domains."
+> **Presenter Note:** "Good morning everyone. Today we are presenting our project: an Intelligible Multi-Agent Blackboard Architecture that allows specialized AI agents to debate, detect conflicts, and safely resolve complex high-stakes problems."
 
 ---
 
 # Slide 2: Project Overview & Our Approach
 
-### The Challenge: Single-Agent LLM Failures
-- **Cognitive Blindspots:** Monolithic LLMs act as unexplainable "black boxes" prone to hallucinations in multi-constraint problems.
-- **Specialty Bias:** In complex domains like medicine, single models suffer from tunnel vision, optimizing for one symptom while missing critical contraindications.
+### The Problem: Single AI Models Have "Tunnel Vision"
+- **Black-Box Reasoning:** A single LLM tries to do everything at once, making it hard to trace why it made a decision.
+- **Cognitive Blindspots:** In complex fields like medicine, a single model often fixates on one symptom and misses critical warnings or conflicting evidence.
 
-### Our Solution: Multi-Agent Blackboard Architecture
-- **Shared Blackboard DAG:** A decentralized workspace where specialist agents collaborate asynchronously without noisy peer-to-peer chatter.
-- **Strict PEX Protocol Contract:** Every contribution outputs formal **Prediction (P)** + **Explanation (E)** + **PXP Tag** (`RATIFY`, `REVISE`, `REFUTE`, `REJECT`).
-- **Dynamic Persona Ingestion:** Automated specialty inference engine (`MedAgentBenchAdapter`) that extracts clinical symptoms from patient vignettes and spawns corresponding specialist personas (e.g., Cardiologist, Pulmonologist).
-- **Automated Deadlock Detection:** Real-time sliding-window monitoring flags circular rejections and deadlocks when specialists reach an impasse.
-- **Autonomous Counterfactual Sandbox:** Spins up an isolated sandbox, rolls back the timeline, simulates "What-If" compromise trials, and merges a Pareto-optimal resolution back to reality.
+### Our Solution: A Collaborative Multi-Agent Blackboard
+- **Shared Digital Blackboard:** Instead of agents talking in a confusing chat loop, they write their findings to a shared, organized board.
+- **Clear Communication Rules (PEX):** Every agent must provide three things:
+  1. **Prediction:** What they believe is happening.
+  2. **Explanation:** Why they believe it (citing specific patient clues).
+  3. **Action Tag:** Clear vote (`Agree`, `Propose`, or `Reject`).
+- **Smart Specialist Routing:** The system reads the patient case and automatically calls in the right specialists (e.g., Cardiologist for heart symptoms, Pulmonologist for lung symptoms).
+- **Automated Deadlock Detection:** If specialists stubbornly reject each other, the system instantly flags a deadlock rather than looping forever.
+- **The "What-If" Sandbox:** A senior arbiter agent pauses the debate, steps into an isolated simulation room, and tests compromise solutions until everyone agrees.
 
-> **Presenter Note:** "When single LLMs handle complex dilemmas, they often suffer from tunnel vision. To solve this, we built a collaborative blackboard architecture. Specialist agents post structured predictions and explanations to a shared board. Our system continuously monitors their dialogue: when specialists enter a circular deadlock, our Counterfactual Sandbox isolates the conflict, tests candidate compromise solutions, and merges the winning resolution back to the main timeline."
+> **Presenter Note:** "When a single AI tries to solve a complex patient case, it often gets tunnel vision. Our architecture solves this by using a medical team approach. Specialists post their claims and evidence to a shared digital blackboard. If two specialists hit a stubborn disagreement, our system detects the deadlock, opens an isolated sandbox, tests 'what-if' compromises, and brings a safe, verified consensus back to the team."
 
 ---
 
 # Slide 3: Live Video Demonstration
 
-### Case Study: High-Stakes Pulmonology vs. Cardiology Dilemma (MedAgentBench)
-*(Embedded Video: Real-Time Visualizer Telemetry & Counterfactual Deadlock Resolution)*
+### Case Study: Heart Failure vs. Lung Disease (MedAgentBench)
+*(Embedded Screen Recording: Real-Time Telemetry & Conflict Resolution)*
 
-### Key Architecture Highlights Shown in Demo:
-1. **Multi-Disciplinary Specialist Panel:**
-   - **Dr. Cardiologist** (focuses on dyspnea & bibasilar crackles $\rightarrow$ proposes Congestive Heart Failure).
-   - **Dr. Pulmonologist** (focuses on HRCT honeycombing & normal BNP $\rightarrow$ refutes with Idiopathic Pulmonary Fibrosis).
-2. **Deadlock Collision Trigger:**
-   - Both specialists issue mutual `REJECT` tags, triggering the red **`[DEADLOCK DETECTED]`** circuit-breaker.
-3. **Isolated "What-If" Counterfactual Sandbox:**
-   - System rolls back to Step 2 in an isolated branch.
-   - **Dr. Attending (Counterfactual Arbiter)** runs 3 iterative candidate trials with peer feedback.
-4. **Hill-Climbing Agreement Scoring ($S_k$):**
-   - Candidate evaluation score progresses from **$0.54 \rightarrow 0.78 \rightarrow 0.95$**.
-5. **Pareto-Optimal Consensus Merge:**
-   - Unified care plan merged into the main DAG: *"Idiopathic Pulmonary Fibrosis (primary) with secondary cardiac monitoring."*
+### What Happens in the Demo:
+1. **The Debate Begins:**
+   - **Cardiologist Agent:** Looks at shortness of breath and fluid sounds $\rightarrow$ Diagnoses Heart Failure.
+   - **Pulmonologist Agent:** Looks at the chest CT scan showing lung scarring (honeycombing) and normal heart labs $\rightarrow$ Diagnoses Lung Fibrosis (IPF).
+2. **The Impasse:**
+   - Both specialists reject each other's diagnosis $\rightarrow$ The red **`[DEADLOCK DETECTED]`** alert triggers!
+3. **The "What-If" Sandbox:**
+   - The system pauses the debate and rolls back to an earlier step in an isolated sandbox.
+   - **Dr. Attending (The Arbiter):** Runs 3 candidate simulation trials to test compromise options with peer feedback.
+4. **Agreement Score Climbs:**
+   - The solution quality score climbs from **$0.54 \rightarrow 0.78 \rightarrow 0.95$**.
+5. **Winning Consensus Merged:**
+   - Both specialists agree on a balanced plan: **Treat the lung fibrosis as primary, while keeping secondary cardiac monitoring.**
 
 > **Presenter Pitch (Voiceover for Video):**
-> *"Here is a live demonstration of our system using a clinical case from the MedAgentBench dataset. On the blackboard, we have two medical specialists—a Cardiologist and a Pulmonologist—along with Dr. Attending serving as the Counterfactual Arbiter.*
->
-> *Initially, both specialists analyze the patient's symptoms and post their own diagnostic claims using our PXP protocol tags. However, because each specialist focuses on different symptoms, they enter a circular REJECT loop.*
->
-> *As soon as this deadlock is detected, the system spawns an isolated sandbox, rolls back to Step 2, and runs three 'What-If' simulation trials against peer critiques. Our agreement scoring function evaluates peer convergence: the highest-scoring Pareto-optimal solution ($S_k = 0.95$) is injected back into the main blackboard timeline, where the specialists ratify it and conclude the debate with a unified diagnosis."*
+> *"Here is a quick demo of our system analyzing a patient case from the MedAgentBench dataset. 
+> 
+> We have three agents on the board: a Cardiologist, a Pulmonologist, and Dr. Attending who acts as the Arbiter. 
+> 
+> Initially, both specialists post their diagnoses using structured tags. But because they focus on different symptoms, they enter a deadlock where they keep rejecting each other.
+> 
+> Watch what happens next: the system detects the deadlock and opens an isolated sandbox. It takes the case back a step and tests three 'What-If' compromise options. As feedback is gathered, our agreement score climbs up to 0.95. The winning compromise is merged back to the main board, where both specialists happily ratify it."*
 
 ---
 
 # Slide 4: Team Contributions & Division of Work
 
-| Team Member | Project Pillar | Core Architectural Deliverables |
+| Team Member | Project Role | What They Built |
 | :--- | :--- | :--- |
-| **Amithav C** | **Blackboard Core & Concurrency** | • Asynchronous Blackboard DAG engine & session lifecycle<br>• Lock leasing, conflict isolation, and Redis / In-Memory storage backends<br>• Strict versioning and audit-trail persistence |
-| **Shiva P** | **Dataset Pipelines & Role Ingestion** | • MedAgentBench & KramaBench dataset ingestion adapters<br>• Automated symptom keyword extraction & specialty inference (`infer_clinical_specialties`)<br>• Standardized clinical contract data models |
-| **Nikhil Palakollu** | **Agent Panel & PEX Protocol** | • Multi-agent persona registry (Cardiologist, Pulmonologist, Attending)<br>• PEX schema contract enforcement, JSON retry repairs, and local Ollama GPU broker<br>• Token telemetry and inference latency profiling |
-| **Harish K** | **Counterfactual Engine & Visualizer** | • Automated sliding-window deadlock detection heuristic<br>• Isolated What-If sandbox manager & hill-climbing scoring engine ($S_k$)<br>• Interactive web visualizer with cognitive flowcharts & live trace ingestion |
+| **Amithav C** | **Blackboard Architecture & Storage** | • Built the central blackboard engine and session coordinator<br>• Implemented fast, thread-safe memory and Redis storage<br>• Designed version tracking so debates can be audited and rewound |
+| **Shiva P** | **Dataset Pipeline & Specialist Routing** | • Integrated the MedAgentBench clinical benchmark dataset<br>• Built the keyword scanner that automatically spawns the right specialists<br>• Standardized clinical data contracts between patient records and AI agents |
+| **Nikhil Palakollu** | **Agent Protocols & Local AI Models** | • Designed the specialist personas (Cardiologist, Pulmonologist, Arbiter)<br>• Enforced strict JSON output contracts and automatic error-repair<br>• Connected agents to local GPU models (Ollama / Qwen 7B) with latency tracking |
+| **Harish K** | **Deadlock Solver & Visualizer Interface** | • Built the automated deadlock detection rules (sliding-window monitor)<br>• Developed the What-If simulation sandbox and agreement scoring engine<br>• Designed the interactive visualizer with live thought flowcharts |
 
-> **Presenter Note:** "Our team divided the project into four cohesive engineering pillars: Amithav built the concurrent blackboard DAG and storage layer; Shiva developed the MedAgentBench ingestion adapters and automated role inference; Nikhil engineered the multi-agent PEX protocol and local Ollama GPU broker; and Harish implemented the counterfactual deadlock solver and the real-time intelligible visualizer."
+> **Presenter Note:** "Our team divided the project into four clear parts: Amithav built the central blackboard and storage; Shiva handled patient data and automatic specialist routing; Nikhil built the agent personas and connected our local AI models; and Harish engineered the deadlock solver and our interactive visualizer."
 
 ---
 
 # Slide 5: Conclusion & Q&A
 
-### Summary of Impact
-- **From Black-Box to Auditable AI:** Every assertion is grounded in evidence references, explicit clinical rules, and verifiable PXP tags.
-- **Fail-Safe Conflict Governance:** Autonomous deadlock detection stops circular debates before catastrophic or biased decisions are made.
-- **Self-Healing Synthesis:** The Counterfactual Sandbox discovers Pareto-optimal compromise solutions that single LLMs miss.
+### Key Takeaways
+- **Transparent & Explainable:** Every decision is backed by visible patient clues and clear reasoning steps—no mystery black box.
+- **Fail-Safe Conflict Handling:** Disagreements are caught early and resolved through structured compromise rather than endless looping.
+- **Teamwork Beats Solo AI:** Diverse specialist agents collaborating on a blackboard make safer, more balanced decisions than any single prompt could.
 
 ### Thank You!
 **Intelligible Multi-Agent Blackboard Architecture**
-*Questions & Discussion*
+*We welcome your questions!*
 
-> **Presenter Note:** "In summary, our system turns multi-agent LLM reasoning from an unpredictable black box into a transparent, self-correcting, and production-grade architecture. Thank you, and we are now open to take your questions."
+> **Presenter Note:** "In summary, our architecture proves that giving AI agents a structured workspace to collaborate and resolve disagreements leads to safer and more transparent decisions. Thank you, and we'd love to take your questions."
