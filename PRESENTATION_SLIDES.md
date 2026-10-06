@@ -70,32 +70,32 @@
 
 # Slide 4: Team Contributions & Division of Work
 
-| Team Member | Architectural Pillar | Key Engineering Deliverables |
+| Team Member | Project Role | Core Engineering Contributions |
 | :--- | :--- | :--- |
-| **Amithav C** | **Core Blackboard Engine & Concurrency** | • Built the central Blackboard DAG, session management, and state store<br>• Implemented lock leasing and thread-safe Redis / In-Memory persistence<br>• Designed the state rollback mechanisms required for timeline branching |
-| **Shiva P** | **Benchmark Adapters & Role Routing** | • Built domain adapters for standard benchmarks (MedAgentBench, KramaBench)<br>• Developed automated entity extraction to route domain keywords to personas<br>• Standardized data interchange schemas across heterogeneous test datasets |
-| **Nikhil Palakollu** | **Agent Protocols & LLM Infrastructure** | • Engineered the formal PEX protocol schema and automatic JSON error-repair<br>• Built the local LLM model broker (Ollama / Qwen 7B) with concurrency control<br>• Profiled token usage, latency metrics, and agent persona definitions |
-| **Harish K** | **Deadlock Detection & Visualizer Telemetry** | • Implemented the sliding-window deadlock detection heuristic<br>• Developed the What-If simulation sandbox and agreement scoring engine ($S_k$)<br>• Built the interactive web visualizer with live SVG flowcharts and trace ingestion |
+| **Shiva P** | **Agent Personas & Live Testing** | • Designed and configured the specialist agent personas (Cardiologist, Pulmonologist, Arbiter)<br>• Tested dataset test cases and prompt variations on live local models (Ollama / Qwen 7B)<br>• Validated agent response consistency and PEX protocol adherence |
+| **Amithav C** | **Blackboard Architecture & Scheduler** | • Designed and implemented the core Blackboard DAG architecture<br>• Built the agent scheduling logic, session lifecycle, and turn-taking coordinator<br>• Implemented concurrency control, lock leasing, and state storage engines |
+| **Nikhil Palakollu** | **Counterfactual Logic & Sandbox Simulator** | • Engineered the entire counterfactual agent decision logic and conflict attribution<br>• Built the isolated What-If sandbox simulator and state rollback mechanisms<br>• Developed the iterative hill-climbing agreement scoring function ($S_k$) |
+| **Harish K** | **Visualizer Presentation UI & Evaluation** | • Designed and developed the interactive presentation UI/visualizer with live SVG flowcharts<br>• Implemented real-time telemetry trace ingestion and collapsible cognitive thought views<br>• Conducted system performance evaluation, latency profiling, and benchmark analysis |
 
-> **Presenter Note:** "Our team divided the work across the four core pillars of the architecture: Amithav built the underlying blackboard engine and storage; Shiva developed the benchmark adapters and entity-routing pipelines; Nikhil engineered the agent communication protocol and local LLM broker; and Harish built the deadlock detection engine and the interactive telemetry visualizer."
+> **Presenter Note:** "Our team divided the work into four clear areas: Shiva designed the specialist agent personas and ran tests on our live models; Amithav built the central blackboard architecture and scheduler; Nikhil developed the counterfactual agent logic and the What-If sandbox simulator; and Harish built the interactive presentation UI and led the system evaluation."
 
 ---
 
 # Slide 5: Conclusion & Future Plans
 
-### Current Architecture Strengths
-- **Domain-Independent Framework:** Works across software engineering, legal compliance, financial risk, and healthcare.
-- **Fail-Safe Conflict Recovery:** Automatic deadlock detection and sandbox simulation stop circular arguments before catastrophic decisions occur.
-- **100% Explainable & Auditable:** Every assertion, vote, and state rollback is permanently recorded on the blackboard DAG with full telemetry.
+### Key Architecture Strengths
+- **Works in Any Domain:** General-purpose design suited for medicine, software engineering, law, or finance.
+- **Stops Infinite Loops:** Automated deadlock detection and sandbox simulation catch and resolve disagreements safely.
+- **Clear & Explainable:** Every claim, vote, and state rollback is visible and auditable—no black box.
 
-### Future Roadmap & Next Steps
-- **Semantic Specialist Routing:** Upgrade from keyword matching to zero-shot semantic embedding routers that automatically decompose any unseen problem into tailored expert personas.
-- **Heterogeneous Model Diversity:** Combine different LLM architectures (e.g., DeepSeek-R1 for chain-of-thought math, Qwen for fast critique, and Claude for final arbitration) to prevent shared model biases.
-- **Human-in-the-Loop (HITL) Escalation:** If the sandbox engine cannot converge within trial budget ($S_k < 0.70$), automatically escalate to a human expert with the full audit trail and highlighted divergence points.
-- **Multi-Benchmark Expansion:** Broaden stress-testing from MedAgentBench to automated software bug-fixing (SWE-bench) and large-scale data engineering (KramaBench).
+### Future Plans (Simple Roadmap)
+1. **Smarter Expert Routing:** Automatically detect and assign the right specialist agents from raw text instead of relying on keywords.
+2. **Mixing Different AI Models:** Combine different LLMs (e.g., Claude, GPT, and open-source models) so agents don't share the same blindspots.
+3. **Human-in-the-Loop Backup:** If agents ever reach an unresolvable impasse, automatically hand the case to a human expert with a complete summary of the debate.
+4. **Testing More Fields:** Expand evaluation into legal contract review, financial risk analysis, and software code debugging.
 
 ### Thank You!
 **Intelligible Multi-Agent Blackboard Architecture**
 *Questions & Discussion*
 
-> **Presenter Note:** "In conclusion, our project establishes a robust, domain-independent multi-agent architecture that turns chaotic LLM arguments into structured, self-healing deliberation. Moving forward, our roadmap includes zero-shot semantic role routing, multi-model diversity to avoid shared blindspots, and human-in-the-loop escalation when automated trials reach an impasse. Thank you, and we'd be thrilled to answer your questions."
+> **Presenter Note:** "In summary, our architecture gives AI agents a structured workspace to collaborate, detect conflicts, and self-heal through sandboxed simulations. Our future plans focus on smarter agent selection, mixing different AI models to eliminate shared biases, and adding a human-in-the-loop fallback for unresolved debates. Thank you, and we are now open for questions!"
