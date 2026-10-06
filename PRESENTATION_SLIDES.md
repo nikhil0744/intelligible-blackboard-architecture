@@ -81,15 +81,21 @@
 
 ---
 
-# Slide 5: Conclusion & Future Work
+# Slide 5: Conclusion & Future Plans
 
-### Key Architecture Strengths
-- **A General-Purpose Framework:** Built to support any domain—from software engineering and data analytics to legal review and healthcare.
-- **Fail-Safe Self-Healing:** Autonomous deadlock detection and sandbox simulation prevent agents from getting stuck in infinite contradiction loops.
+### Current Architecture Strengths
+- **Domain-Independent Framework:** Works across software engineering, legal compliance, financial risk, and healthcare.
+- **Fail-Safe Conflict Recovery:** Automatic deadlock detection and sandbox simulation stop circular arguments before catastrophic decisions occur.
 - **100% Explainable & Auditable:** Every assertion, vote, and state rollback is permanently recorded on the blackboard DAG with full telemetry.
+
+### Future Roadmap & Next Steps
+- **Semantic Specialist Routing:** Upgrade from keyword matching to zero-shot semantic embedding routers that automatically decompose any unseen problem into tailored expert personas.
+- **Heterogeneous Model Diversity:** Combine different LLM architectures (e.g., DeepSeek-R1 for chain-of-thought math, Qwen for fast critique, and Claude for final arbitration) to prevent shared model biases.
+- **Human-in-the-Loop (HITL) Escalation:** If the sandbox engine cannot converge within trial budget ($S_k < 0.70$), automatically escalate to a human expert with the full audit trail and highlighted divergence points.
+- **Multi-Benchmark Expansion:** Broaden stress-testing from MedAgentBench to automated software bug-fixing (SWE-bench) and large-scale data engineering (KramaBench).
 
 ### Thank You!
 **Intelligible Multi-Agent Blackboard Architecture**
 *Questions & Discussion*
 
-> **Presenter Note:** "In conclusion, our project provides a robust, domain-independent multi-agent architecture that turns chaotic LLM debates into structured, self-healing deliberation. Thank you, and we'd be glad to answer any questions."
+> **Presenter Note:** "In conclusion, our project establishes a robust, domain-independent multi-agent architecture that turns chaotic LLM arguments into structured, self-healing deliberation. Moving forward, our roadmap includes zero-shot semantic role routing, multi-model diversity to avoid shared blindspots, and human-in-the-loop escalation when automated trials reach an impasse. Thank you, and we'd be thrilled to answer your questions."
