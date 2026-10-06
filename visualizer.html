@@ -1274,11 +1274,7 @@
               score: 0.54,
               status: "REJECTED (Score: 0.54 < 0.70)",
               statusClass: "sub-threshold",
-              prompt: "[RETROSPECTIVE SYNTHESIS PROMPT #1]
-Target Agent: Dr. Cardiologist
-Context: Impasse detected between Congestive Heart Failure and Idiopathic Pulmonary Fibrosis.
-Clashing Evidence: subpleural honeycombing on HRCT, finger clubbing, normal BNP
-Task: Formulate candidate revision (PXPTag.REVISE) acknowledging pulmonologist's objection.",
+              prompt: "[RETROSPECTIVE SYNTHESIS PROMPT #1]\nTarget Agent: Dr. Cardiologist\nContext: Impasse detected between Congestive Heart Failure and Idiopathic Pulmonary Fibrosis.\nClashing Evidence: subpleural honeycombing on HRCT, finger clubbing, normal BNP\nTask: Formulate candidate revision (PXPTag.REVISE) acknowledging pulmonologist's objection.",
               response: "Propose mild interstitial lung changes alongside primary Congestive Heart Failure (CHF). Maintain diuretic therapy.",
               peerCritique: "REJECT: Dr. Pulmonologist rejects. Honeycombing represents irreversible fibrotic architectural remodeling, not 'mild interstitial changes'. Volume depletion will not resolve alveolar collapse.",
               action: "Sub-threshold agreement (0.54) ➔ Extracting critique for Trial 2"
@@ -1289,11 +1285,7 @@ Task: Formulate candidate revision (PXPTag.REVISE) acknowledging pulmonologist's
               score: 0.78,
               status: "IMPROVING (Score: 0.78 < 0.85)",
               statusClass: "critique",
-              prompt: "[CRITIQUE-GUIDED PROMPT #2]
-Target Agent: Dr. Cardiologist
-[PRIOR PEER CRITIQUE]
-\"Address peer's objection: Honeycombing is structural fibrotic distortion, not transient fluid. Shift focus away from primary diuresis.\"
-Task: Refine compromise proposition.",
+              prompt: "[CRITIQUE-GUIDED PROMPT #2]\nTarget Agent: Dr. Cardiologist\n[PRIOR PEER CRITIQUE]\n\"Address peer's objection: Honeycombing is structural fibrotic distortion, not transient fluid. Shift focus away from primary diuresis.\"\nTask: Refine compromise proposition.",
               response: "Acknowledge IPF honeycombing as significant finding. Shift cardiac focus away from primary diuresis toward secondary monitoring.",
               peerCritique: "REVISE: Dr. Pulmonologist notes substantial progress (Score 0.78), but requests explicit primary IPF classification with antifibrotic priority.",
               action: "Critique integrated ➔ Refining candidate for Trial 3"
@@ -1304,9 +1296,7 @@ Task: Refine compromise proposition.",
               score: 0.95,
               status: "WINNER SELECTED (Score: 0.95 ≥ 0.70)",
               statusClass: "winner",
-              prompt: "[FINAL SYNTHESIS PROMPT #3]
-Target: Both Specialists
-Task: Synthesize final dual-care compromise: Classify IPF as primary etiology with antifibrotic therapy, while retaining secondary outpatient cardiac telemetry.",
+              prompt: "[FINAL SYNTHESIS PROMPT #3]\nTarget: Both Specialists\nTask: Synthesize final dual-care compromise: Classify IPF as primary etiology with antifibrotic therapy, while retaining secondary outpatient cardiac telemetry.",
               response: "RESOLVED: Idiopathic Pulmonary Fibrosis (IPF) primary diagnosis with secondary cardiac monitoring. Antifibrotic therapy (Pirfenidone/Nintedanib) indicated.",
               peerCritique: "Unanimous RATIFY: Both peer models ratify (Score 0.95). Intelligibility Level: ULTRA_STRONG. Consensus certified!",
               action: "🚀 Merged to Main Blackboard DAG (Turn 5)"
@@ -1597,10 +1587,7 @@ Task: Synthesize final dual-care compromise: Classify IPF as primary etiology wi
               score: 0.12,
               status: "DEADLOCK (87.5% Failure Rate)",
               statusClass: "sub-threshold",
-              prompt: "[BASELINE TRIAL - 0% CF DENSITY]
-Zero counterfactual agents present.
-Clashing positions: Systems Engineer (50 kPa, 680°C) vs Safety Critic (Immediate Cutoff).
-Task: Attempt resolution without sandbox.",
+              prompt: "[BASELINE TRIAL - 0% CF DENSITY]\nZero counterfactual agents present.\nClashing positions: Systems Engineer (50 kPa, 680°C) vs Safety Critic (Immediate Cutoff).\nTask: Attempt resolution without sandbox.",
               response: "Circular REJECT loop persisted across 15 turns. Panel unable to synthesize compromise.",
               peerCritique: "DEADLOCK: Critic rejected 680°C as catastrophic. Max turns reached with zero resolution.",
               action: "Baseline failed ➔ Proves necessity of counterfactual intervention"
@@ -1611,10 +1598,7 @@ Task: Attempt resolution without sandbox.",
               score: 0.88,
               status: "RECOVERED (Score: 0.88 ≥ 0.70)",
               statusClass: "critique",
-              prompt: "[RETROSPECTIVE SYNTHESIS PROMPT]
-Target: cf_counterfactual_2
-Clashing Evidence: Stage 2 thermal envelope (650°C) vs exhaust velocity.
-Task: Synthesize Pareto-optimal compromise.",
+              prompt: "[RETROSPECTIVE SYNTHESIS PROMPT]\nTarget: cf_counterfactual_2\nClashing Evidence: Stage 2 thermal envelope (650°C) vs exhaust velocity.\nTask: Synthesize Pareto-optimal compromise.",
               response: "Simulate bypass valve at 42 kPa with 620°C cutoff. Satisfies safety envelope while retaining 94% velocity.",
               peerCritique: "RATIFY: Safety Critic agrees with 620°C thermal margin. Systems Engineer confirms acceptable exhaust backpressure.",
               action: "Recovery successful in 5.2 turns ➔ Escalating to 100% density"
@@ -1625,9 +1609,7 @@ Task: Synthesize Pareto-optimal compromise.",
               score: 0.95,
               status: "WINNER SELECTED (100% Consensus)",
               statusClass: "winner",
-              prompt: "[FINAL BENCHMARK PROMPT]
-Target: Engineering Panel
-Task: Certify Ultra-Strong Intelligibility level and verify mathematical compliance.",
+              prompt: "[FINAL BENCHMARK PROMPT]\nTarget: Engineering Panel\nTask: Certify Ultra-Strong Intelligibility level and verify mathematical compliance.",
               response: "Optimal operating envelope — 42 kPa bypass valve with 620°C cutoff adopted unanimously.",
               peerCritique: "Unanimous RATIFY: Intelligibility Score: 0.95 (Ultra-Strong). 0.0% deadlock rate across 500 trials.",
               action: "🚀 Monotonic consensus gain proven: 3.8 mean turns"
