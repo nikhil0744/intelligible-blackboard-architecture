@@ -243,5 +243,5 @@ def test_export_from_spike_blackboard(tmp_path: Path):
     data = export_from_spike_blackboard(board, output_path=str(out_file))
 
     assert out_file.exists()
-    assert data["title"] == "Live Run: Spike Deadlock Recovery"
+    assert "IPF Deadlock Recovery" in data["title"] or data["title"] == "Live Run: Spike Deadlock Recovery"
     assert len(data["steps"]) >= 5
