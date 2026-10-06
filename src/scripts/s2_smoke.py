@@ -34,6 +34,7 @@ def main() -> int:
     ap.add_argument("--agents", type=int, default=3)
     ap.add_argument("--turns", type=int, default=4)
     ap.add_argument("--parallel", action="store_true", help="also time one parallel round")
+    ap.add_argument("--prompt", "--question", dest="custom_prompt", default=None, help="Custom prompt / dilemma for the agents to debate")
     args = ap.parse_args()
 
     overrides = {k: v for k, v in {"llm_backend": args.backend, "llm_model": args.model}.items() if v}
@@ -51,7 +52,11 @@ def main() -> int:
             return 1
 
     board = InMemoryBoard()
-    task_id, question = TASKS[args.domain]
+    if args.custom_prompt:
+        task_id = "custom_task"
+        question = args.custom_prompt
+    else:
+        task_id, question = TASKS[args.domain]
     sid = board.create_session(task_id, question).session_id
     panel = build_panel(broker, domain=args.domain, size=args.agents, counterfactual_density=0.33)
     print("panel:", panel)
