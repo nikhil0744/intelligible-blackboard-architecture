@@ -32,7 +32,7 @@ def main() -> int:
     ap.add_argument("--model", default=None)
     ap.add_argument("--domain", default="general", choices=sorted(TASKS))
     ap.add_argument("--agents", type=int, default=3)
-    ap.add_argument("--turns", type=int, default=4)
+    ap.add_argument("--turns", type=int, default=15, help="max turns to simulate (default: 15; exits early on consensus)")
     ap.add_argument("--parallel", action="store_true", help="also time one parallel round")
     ap.add_argument("--prompt", "--question", dest="custom_prompt", default=None, help="Custom prompt / dilemma for the agents to debate")
     args = ap.parse_args()
@@ -61,6 +61,7 @@ def main() -> int:
     panel = build_panel(broker, domain=args.domain, size=args.agents, counterfactual_density=0.33)
     print("panel:", panel)
 
+    consecutive_ratify = 0
     with broker:
         for t in range(args.turns):
             agent = panel[t % len(panel)]
@@ -68,6 +69,13 @@ def main() -> int:
             c = agent.step(board, sid)
             print(f"turn {t}: {agent.agent_id:<22} {c.tag.value:<7} conf={c.payload.prediction.confidence:.2f} "
                   f"tok={c.token_usage} {time.perf_counter() - t0:5.1f}s | {c.payload.prediction.claim[:80]}")
+            if c.tag.value == "RATIFY":
+                consecutive_ratify += 1
+                if consecutive_ratify >= 2 and t >= len(panel) - 1:
+                    print(f"[*] Consensus convergence reached at turn {t} (multiple peer ratifications). Concluding debate early.")
+                    break
+            else:
+                consecutive_ratify = 0
         if args.parallel:
             t0 = time.perf_counter()
             act_parallel(panel, board.get_snapshot(sid))
