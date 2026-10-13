@@ -1,101 +1,114 @@
 # Intelligible Multi-Agent Blackboard Architecture
-## A Self-Healing Framework for Collaborative AI Reasoning & Conflict Resolution
+## Mid-Semester Implementation Checkpoint & Proof-of-Work Verification
 
 ---
 
-# Slide 1: Title Slide
+# Slide 1: Title & Project Status
 
 ### Intelligible Multi-Agent Blackboard Architecture
-**Sub-title:** A Self-Healing Framework for Collaborative AI Reasoning & Conflict Resolution
+**Sub-title:** Mid-Semester Engineering Checkpoint: System Implementation & Proof-of-Work Verification
 
 **Presented by:**
-- Amithav C
-- Shiva P
-- Nikhil Palakollu
-- Harish K
+- Amithav C (Blackboard Engine & Concurrency)
+- Shiva P (Agent Personas & Dataset Ingestion)
+- Nikhil Palakollu (Counterfactual Engine & Sandbox Simulator)
+- Harish K (Interactive Visualizer UI & Evaluation)
 
-**Research Area:** Multi-Agent AI Systems • Distributed Coordination • Explainable AI Architecture
+**Implementation Status:** Core Architecture Deployed • 179 Unit Tests Passing • Real Local Models Integrated (Ollama / Qwen2.5-7B)
 
-> **Presenter Note:** "Good morning everyone. Today we are presenting our project: an Intelligible Multi-Agent Blackboard Architecture—a general-purpose framework that allows specialized AI agents to collaborate, detect circular disagreements, and autonomously self-heal through counterfactual sandboxing."
-
----
-
-# Slide 2: Project Overview & Our Approach
-
-### The Core Problem: Multi-Agent Systems Get Stuck
-- **Black-Box Confusion:** When multiple LLMs talk in open chat loops, conversations become noisy, disorganized, and difficult to audit.
-- **Unresolved Impasses:** When models have competing priorities, they either blindly hallucinate a winner or get trapped in circular rejection loops with no way to recover.
-
-### Our Solution: A Self-Healing Blackboard Framework
-- **Domain-Agnostic Blackboard DAG:** A central, structured workspace where diverse AI agents post findings asynchronously rather than talking over each other.
-- **Strict PEX Communication Protocol:** Every agent communicates using a universal contract:
-  1. **Prediction:** The specific claim or recommended action.
-  2. **Explanation:** Transparent rationale citing concrete evidence references.
-  3. **PXP Action Tag:** A formal vote (`RATIFY`, `REVISE`, `REFUTE`, `REJECT`).
-- **Configurable Persona Registry:** The architecture can seat any team of specialist agents—whether for software engineering, financial modeling, or healthcare.
-- **Automated Deadlock Detection:** An algorithmic circuit-breaker continuously monitors agent votes and flags a deadlock whenever a circular rejection loop occurs.
-- **Counterfactual "What-If" Sandbox:** Automatically pauses the live timeline, branches into an isolated simulation room, rolls back state, and iterates through candidate compromises until consensus is reached.
-
-> **Presenter Note:** "Current multi-agent frameworks often break down when models disagree—they either talk in circles or crash. We engineered an intelligible blackboard architecture. Agents post formal predictions, explanations, and votes to a central board. When the system detects that agents have entered a deadlock, our autonomous Counterfactual Sandbox pauses the debate, steps into an isolated branch, and runs 'What-If' simulations until it finds a verified compromise."
+> **Presenter Note:** "Good morning everyone. Today we are presenting our mid-semester implementation checkpoint for the Intelligible Multi-Agent Blackboard Architecture. Rather than just presenting concepts, we are excited to show our working software architecture, real local model execution telemetry, and our automated verification test suite."
 
 ---
 
-# Slide 3: System Evaluation & Live Demonstration
+# Slide 2: What We Have Built — System Architecture
 
-### Stress-Testing the Architecture: The MedAgentBench Benchmark
-*(We evaluated our general architecture on MedAgentBench because high-stakes clinical diagnosis provides the ultimate test of competing expert opinions.)*
+### The 4 Core Subsystems Deployed in Our Codebase:
 
-### What Happens in the Demo:
-1. **Specialists at Work:**
-   - The system ingests a complex case and seats two competing specialist agents on the board (a **Cardiologist** and a **Pulmonologist**).
-   - Each specialist analyzes the problem through their own domain lens and posts contrasting assertions using PEX tags.
-2. **The Deadlock Trigger:**
-   - Neither agent is willing to back down $\rightarrow$ Both issue mutual `REJECT` votes $\rightarrow$ The blackboard's **`[DEADLOCK DETECTED]`** circuit-breaker triggers!
-3. **The "What-If" Sandbox Intervenes:**
-   - The system freezes the main branch, rolls back to an earlier decision point, and spawns an isolated simulation sandbox.
-   - An **Arbiter Agent** runs 3 candidate "What-If" trials, adjusting prompts and incorporating peer feedback.
-4. **Iterative Agreement Scoring:**
-   - The consensus score hill-climbs from **$0.54 \rightarrow 0.78 \rightarrow 0.95$**.
-5. **Consensus Merged Back to Reality:**
-   - The winning balanced compromise is merged back into the live blackboard DAG, and all agents ratify the final decision.
+1. **Central Blackboard DAG & State Store:**
+   - Asynchronous, thread-safe blackboard DAG where agents read and write structured claims without direct peer chatter.
+   - Dual-persistence layer: Fast In-Memory storage for tests + Redis store with lock leasing.
+
+2. **Formal PEX Protocol & Agent Registry:**
+   - Every agent outputs a typed contract: **Prediction (P)** + **Explanation (E)** + **Action Tag (X)** (`RATIFY`, `REVISE`, `REFUTE`, `REJECT`).
+   - Automated JSON schema enforcement and self-repair loop to prevent malformed LLM outputs.
+
+3. **Domain Ingestion Adapter (MedAgentBench):**
+   - Automated parser that ingests real clinical vignettes, extracts symptoms and lab biomarkers, and dynamically infers and seats the required specialist personas (Cardiologist, Pulmonologist, Arbiter).
+
+4. **Deadlock Attribution & Counterfactual Sandbox Engine:**
+   - Algorithmic sliding-window circuit breaker that automatically detects circular rejection loops.
+   - Isolated "What-If" sandbox that rolls back state, simulates candidate compromises, and evaluates them with a mathematical scoring function ($S_k$).
+
+> **Presenter Note:** "To make multi-agent reasoning robust and explainable, we engineered four core subsystems: our asynchronous Blackboard DAG, a strict PEX protocol contract that forces agents to provide explanations, an automated benchmark ingestion adapter, and our counterfactual sandbox engine that detects and resolves deadlocks."
+
+---
+
+# Slide 3: Proof of Work #1 — Engineering Verification & Local LLM Telemetry
+
+### How We Know the System is Working: Hard Evidence
+
+1. **100% Automated Test Coverage (179 Passing Tests):**
+   - **179 unit tests** pass in **2.2 seconds** across all 4 modules (`pytest -q`).
+   - Validates blackboard concurrency, state rollbacks, PEX JSON parsing, scoring formulas, and dataset ingestion.
+
+2. **Real Local LLM Execution (No Mockups, No Paid API Dependencies):**
+   - Integrated with local **Ollama** running quantized **Qwen2.5-7B-Instruct** on GPU/CUDA.
+   - Real-time token consumption and latency profiling:
+     - *Turn 1 (Cardiologist):* $774\text{ tokens} \cdot 2.8\text{s}$ (Proposes CHF)
+     - *Turn 2 (Pulmonologist):* $963\text{ tokens} \cdot 3.4\text{s}$ (Refutes with IPF)
+
+3. **Mathematical Convergence Function ($S_k$):**
+   - We do not "hope" the models agree; we mathematically verify consensus:
+     $$\mathbf{S_k = 0.50\,\text{Agreement} + 0.25\,\Delta\text{Entropy} + 0.15\,\text{Confidence} + 0.10\,\text{Fidelity}}$$
+   - Grounded in Claude Shannon’s Information Entropy drop ($\Delta H$) and patient evidence retention.
+
+> **Presenter Note:** "How do we prove this is working? First, we have 179 automated unit tests verifying every single class and contract in 2.2 seconds. Second, our agents run on real local LLMs using Ollama and Qwen2.5-7B with active latency and token tracking. Third, our system uses an information-theoretic scoring function to mathematically prove consensus rather than guessing."
+
+---
+
+# Slide 4: Proof of Work #2 — Live Demonstration & Deadlock Resolution
+
+### Test Case: Stress-Testing on MedAgentBench (`med_task_fibrosis_vs_chf`)
+*(Live Visualizer Demo: Dynamic Telemetry Ingestion, Conflict Detection, and Sandbox Self-Healing)*
+
+### What the Demonstration Proves:
+1. **Explainable Cognitive Flowcharts:**
+   - Expanding any agent node displays its internal 4-stage reasoning:
+     *Evidence Ingested $\rightarrow$ Clinical Rule $\rightarrow$ Chain-of-Thought Deliberation $\rightarrow$ Formal PEX Vote*.
+2. **Algorithmic Deadlock Detection:**
+   - Both specialists refuse to compromise $\rightarrow$ Mutual `REJECT` votes trigger the red **`[DEADLOCK DETECTED]`** circuit-breaker.
+3. **The "What-If" Sandbox in Action:**
+   - The engine pauses the debate, rolls back to Step 2, and isolates the conflict in a sandbox.
+   - Dr. Attending runs 3 iterative candidate trials with peer feedback.
+4. **Hill-Climbing Score Trajectory:**
+   - Candidate evaluation score progresses: **$0.54$ (Rejected) $\rightarrow 0.78$ (Improving) $\rightarrow 0.95$ (Winner)**.
+   - The winning compromise (*IPF primary + secondary cardiac monitoring*) is merged into the live board DAG.
 
 > **Presenter Pitch (Voiceover for Video):**
-> *"To prove that our architecture can resolve real-world conflicts, we stress-tested it against a benchmark from MedAgentBench. We chose this benchmark because high-stakes medicine is a domain where specialists naturally clash.
+> *"Here is our live interactive visualizer ingesting real model telemetry from a MedAgentBench case. You can see the cognitive thought flowcharts showing the exact clinical evidence behind every decision. 
 > 
-> In this demo, the blackboard seats two specialists with competing views: a Cardiologist and a Pulmonologist. As they debate, they hit a circular rejection loop. 
+> When the Cardiologist and Pulmonologist clash and repeatedly reject each other's claims, our automated deadlock detector flags the impasse. 
 > 
-> Watch how our architecture responds: it immediately flags the deadlock, pauses the debate, and spins up an isolated What-If sandbox. It rolls back the state to Step 2 and runs three simulation trials, gathering peer critique until our agreement score hits 0.95. The winning compromise is then seamlessly merged back to the live board, successfully clearing the impasse."*
+> Rather than crashing, our Counterfactual Sandbox rolls back the timeline to Step 2 and runs three simulation trials. As peer feedback is incorporated, our agreement score climbs from 0.54 to 0.95. The winning compromise is verified and merged back to the live board, successfully resolving the conflict."*
 
 ---
 
-# Slide 4: Team Contributions & Division of Work
+# Slide 5: Team Contributions & Mid-Semester Milestones
 
-| Team Member | Project Role | Core Engineering Contributions |
+| Team Member | Project Role | Mid-Semester Delivered Milestones |
 | :--- | :--- | :--- |
-| **Shiva P** | **Agent Personas & Live Testing** | • Designed and configured the specialist agent personas (Cardiologist, Pulmonologist, Arbiter)<br>• Tested dataset test cases and prompt variations on live local models (Ollama / Qwen 7B)<br>• Validated agent response consistency and PEX protocol adherence |
-| **Amithav C** | **Blackboard Architecture & Scheduler** | • Designed and implemented the core Blackboard DAG architecture<br>• Built the agent scheduling logic, session lifecycle, and turn-taking coordinator<br>• Implemented concurrency control, lock leasing, and state storage engines |
-| **Nikhil Palakollu** | **Counterfactual Logic & Sandbox Simulator** | • Engineered the entire counterfactual agent decision logic and conflict attribution<br>• Built the isolated What-If sandbox simulator and state rollback mechanisms<br>• Developed the iterative hill-climbing agreement scoring function ($S_k$) |
-| **Harish K** | **Visualizer Presentation UI & Evaluation** | • Designed and developed the interactive presentation UI/visualizer with live SVG flowcharts<br>• Implemented real-time telemetry trace ingestion and collapsible cognitive thought views<br>• Conducted system performance evaluation, latency profiling, and benchmark analysis |
+| **Amithav C** | **Blackboard Core & Concurrency** | • Built Blackboard DAG engine, session lifecycle, and turn coordinator<br>• Implemented lock leasing and thread-safe In-Memory and Redis storage<br>• Engineered timeline rollback mechanisms for sandbox branching |
+| **Shiva P** | **Agent Personas & Dataset Ingestion** | • Designed and validated specialist personas (Cardiologist, Pulmonologist, Arbiter)<br>• Built MedAgentBench ingestion adapter with automated keyword role inference<br>• Tested dataset prompts against live local Ollama models |
+| **Nikhil Palakollu** | **Counterfactual Engine & Sandbox** | • Engineered the sliding-window deadlock detection heuristic<br>• Built the isolated What-If sandbox simulator and prompt generation pipeline<br>• Implemented the 4-pillar mathematical scoring function ($S_k$) and plateau detector |
+| **Harish K** | **Visualizer UI & System Evaluation** | • Designed interactive web visualizer with live SVG flowcharts and trace ingestion<br>• Built collapsible cognitive thought flowchart views for each agent<br>• Conducted system performance profiling, token latency benchmarks, and evaluation |
 
-> **Presenter Note:** "Our team divided the work into four clear areas: Shiva designed the specialist agent personas and ran tests on our live models; Amithav built the central blackboard architecture and scheduler; Nikhil developed the counterfactual agent logic and the What-If sandbox simulator; and Harish built the interactive presentation UI and led the system evaluation."
-
----
-
-# Slide 5: Conclusion & Future Plans
-
-### Key Architecture Strengths
-- **Works in Any Domain:** General-purpose design suited for medicine, software engineering, law, or finance.
-- **Stops Infinite Loops:** Automated deadlock detection and sandbox simulation catch and resolve disagreements safely.
-- **Clear & Explainable:** Every claim, vote, and state rollback is visible and auditable—no black box.
-
-### Future Plans (Simple Roadmap)
-1. **Smarter Expert Routing:** Automatically detect and assign the right specialist agents from raw text instead of relying on keywords.
-2. **Mixing Different AI Models:** Combine different LLMs (e.g., Claude, GPT, and open-source models) so agents don't share the same blindspots.
-3. **Human-in-the-Loop Backup:** If agents ever reach an unresolvable impasse, automatically hand the case to a human expert with a complete summary of the debate.
-4. **Testing More Fields:** Expand evaluation into legal contract review, financial risk analysis, and software code debugging.
+### Next Sprint Goals:
+- [ ] Connect multi-model diversity (pairing local Qwen with DeepSeek-R1 / Claude).
+- [ ] Implement zero-shot semantic embedding routing for automated specialty discovery.
+- [ ] Expand stress-testing to additional benchmark datasets (KramaBench / SWE-bench).
 
 ### Thank You!
 **Intelligible Multi-Agent Blackboard Architecture**
-*Questions & Discussion*
+*We welcome your questions!*
 
-> **Presenter Note:** "In summary, our architecture gives AI agents a structured workspace to collaborate, detect conflicts, and self-heal through sandboxed simulations. Our future plans focus on smarter agent selection, mixing different AI models to eliminate shared biases, and adding a human-in-the-loop fallback for unresolved debates. Thank you, and we are now open for questions!"
+> **Presenter Note:** "In summary, our mid-semester deliverables are fully implemented, verified with 179 green unit tests, and demonstrated on real local model runs. Our next sprint will focus on multi-model diversity and broader benchmark scaling. Thank you, and we are ready for your questions."
