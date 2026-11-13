@@ -2,11 +2,13 @@
 
 **Review date:** 12 November 2026  
 **Repository:** `nikhil0744/intelligible-blackboard-architecture`  
-**Local branch:** `prototype-live-demo`  
+**Reviewed branch at the time of assessment:** `prototype-live-demo`  
 **Reviewed implementation commit:** `5c0036d5694504d1f4e1dea6be6d98d08034abcf`  
 **Scope:** current local implementation, tests, configuration, documentation, and available example artifacts. Existing documentation changes are additional to the commit above. Remote branches, GitHub Issues, and deployed services were not inspected.
 
 This document is a review of current behavior and improvement opportunities. It is not a new implementation plan, a student assignment list, or a claim that the recommended changes have been made. The old plans are [archived and inactive](archive/README.md).
+
+**Branch consolidation, 13 November 2026:** `main` now uses this prototype implementation plus the documentation cleanup. Previous branches are preserved under archive tags; see [branch history](BRANCH_HISTORY.md). Consolidation does not resolve the implementation issues below or import the separate S2/S3 improvements. The verification results remain the measurements made for this review.
 
 ## 1. Overall assessment
 

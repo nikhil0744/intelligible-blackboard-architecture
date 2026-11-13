@@ -7,7 +7,7 @@ Use this reference to run any demo or clinical conflict scenario in your Google 
 ## 🔄 0. Pull Latest Code in Colab (Run First in Cell 2)
 ```bash
 %cd /content/project_blackboard
-!git pull origin prototype-live-demo
+!git pull origin main
 ```
 
 ---

@@ -10,4 +10,4 @@ Use [the current project status review](../PROJECT_STATUS.md) as the baseline fo
 
 Document contents are preserved except for relative navigation links affected by relocation. Source code, tests, benchmark artifacts, notebook cells, and frontend implementation have not been changed by this documentation cleanup. Setup/reference material, assistant templates, and presentation binaries without a dedicated implementation plan remain in place.
 
-Some archived files were previously ignored local documents. A scoped `.gitignore` exception makes the archive eligible for version control. Nothing has been staged, committed, or pushed as part of this cleanup.
+Some archived files were previously ignored local documents. A scoped `.gitignore` exception makes the archive eligible for version control. The archive was initially prepared without publishing; it was subsequently committed during the [13 November branch consolidation](../BRANCH_HISTORY.md).

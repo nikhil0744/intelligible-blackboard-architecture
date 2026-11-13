@@ -87,5 +87,6 @@ This writes `src/contracts/stubs/`. CI instead exports to a temporary directory 
 - [Streaming, dashboard and benchmarking guide](docs/guides/student4.md)
 - [Research and benchmark references](docs/references/README.md)
 - [Archived plans and historical documents](docs/archive/README.md)
+- [Branch consolidation and recovery tags](docs/BRANCH_HISTORY.md)
 
 The contributor guides preserve historical integration notes; this README is the current setup and layout reference.
