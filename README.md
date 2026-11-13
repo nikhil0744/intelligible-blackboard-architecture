@@ -15,7 +15,7 @@ A multi-agent research project combining prediction/explanation exchanges (PXP),
 | `src/fixtures/`, `src/scripts/` | Shared mocks, sample deadlock data and runnable smoke checks |
 | `frontend/` | React/Vite dashboard |
 | `tests/` | Offline unit and integration tests |
-| `docs/` | Current project review, contributor guides, research references and historical archive |
+| `docs/` | Contributor guides and research references |
 | `examples/benchmark-results/` | Preserved example simulation results and figures |
 | `outputs/` | New generated results and figures; ignored by Git |
 
@@ -83,10 +83,7 @@ This writes `src/contracts/stubs/`. CI instead exports to a temporary directory 
 
 ## Further reading
 
-- [Current project status and review](docs/PROJECT_STATUS.md)
 - [Streaming, dashboard and benchmarking guide](docs/guides/student4.md)
 - [Research and benchmark references](docs/references/README.md)
-- [Archived plans and historical documents](docs/archive/README.md)
-- [Branch consolidation and recovery tags](docs/BRANCH_HISTORY.md)
 
 The contributor guides preserve historical integration notes; this README is the current setup and layout reference.

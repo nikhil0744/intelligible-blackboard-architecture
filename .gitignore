@@ -61,7 +61,18 @@ outputs/
 
 # Presentation materials
 Project_Presentation/
+*.ppt
+*.pptx
+*.odp
+*.key
+PRESENTATION*.md
+*SLIDES*.md
+Speaker_Notes.*
 
-# Keep the collected historical plans visible despite the broad rules above.
-!/docs/archive/plans/**
+# Local planning archives, internal reviews, and branch administration notes
+/docs/archive/
+/docs/plans/
+/docs/reviews/
+/docs/PROJECT_STATUS.md
+/docs/BRANCH_HISTORY.md
 
