@@ -1,4 +1,4 @@
-> Historical contributor guide. Run setup commands from the repository root; see the [current README](../../README.md) for the source layout and setup.
+> Historical contributor guide. Run setup commands from the repository root; see the [current README](../../../README.md) for the source layout and setup.
 
 # Student 2 — Agent Engineering & Model Inference Pipeline
 

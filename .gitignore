@@ -62,3 +62,6 @@ outputs/
 # Presentation materials
 Project_Presentation/
 
+# Keep the collected historical plans visible despite the broad rules above.
+!/docs/archive/plans/**
+
