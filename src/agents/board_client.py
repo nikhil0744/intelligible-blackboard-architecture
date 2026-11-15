@@ -35,7 +35,7 @@ class StaleTurnError(ValueError):
 
 
 class InMemoryBoard:
-    """Thread-safe single-process stand-in for S1's blackboard (dev/tests only)."""
+    """Thread-safe board for single-process runs; commits remain scheduler-owned."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -66,6 +66,14 @@ class InMemoryBoard:
 
     def next_turn_index(self, session_id: str) -> int:
         return len(self.get_snapshot(session_id).contributions)
+
+    def update_context(self, session_id: str, context: Dict[str, Any]) -> None:
+        """Replace agent-visible observations under the same lock as contributions."""
+        with self._lock:
+            snap = self._sessions[session_id]
+            snap.initial_context = copy.deepcopy(context)
+            snap.version += 1
+            snap.updated_at = datetime.now(timezone.utc)
 
     def set_status(self, session_id: str, status: BlackboardStatus | str) -> None:
         with self._lock:

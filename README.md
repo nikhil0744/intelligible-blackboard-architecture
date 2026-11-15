@@ -62,6 +62,8 @@ Open <http://localhost:5173>. The dashboard includes demo data. Build it with `n
 
 ## Verification and examples
 
+For the real, API-free KramaBench pilot, use the [Colab benchmark notebook](notebooks/colab_benchmarks.ipynb) and [usage guide](docs/guides/colab-benchmarks.md). It supports three pinned legal CSV tasks, durable attempts and resume. Fresh-Colab/GPU acceptance is pending; recovery and MedAgentBench are unavailable in this pilot.
+
 ```bash
 python -m pytest -q
 python -m scripts.s2_smoke --backend mock --parallel
@@ -69,7 +71,7 @@ python -m fixtures.spike_starter
 python -m benchmarks.mscore --mock --trials 8
 ```
 
-The benchmark command writes `outputs/results.csv`, `outputs/results.json`, and `outputs/figures/`. Override destinations using `--out-csv`, `--out-json`, and `--figures-dir`. The plotting helper also defaults to `outputs/figures/`.
+The historical `benchmarks.mscore` simulation writes `outputs/results.csv`, `outputs/results.json`, and `outputs/figures/`. Override destinations using `--out-csv`, `--out-json`, and `--figures-dir`. It is separate from the real `benchmarks.run` executor; its `--live` mode is not official KramaBench/MedAgentBench execution.
 
 Saved [example results](examples/benchmark-results/README.md) are simulation outputs. They illustrate output formats and plots rather than establish live-model performance.
 

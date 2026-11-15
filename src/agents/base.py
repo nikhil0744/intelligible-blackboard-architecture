@@ -219,7 +219,7 @@ class PEXAgent:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 seed=self.seed,
-                json_schema=decision_json_schema(reasoning_first=self.reasoning_first) if self.use_json_schema else None,
+                json_schema=self.output_schema() if self.use_json_schema else None,
                 agent_id=self.agent_id,
                 # ledger tags; trial_id / phase come from the caller's usage_scope
                 metadata={
@@ -245,7 +245,7 @@ class PEXAgent:
             latency += resp.latency_ms
             raw.append(resp.text)
             try:
-                decision, normalizations = self.validate_output(parse_decision(resp.text), snapshot)
+                decision, normalizations = self.validate_output(self.parse_output(resp.text), snapshot)
                 return Formulation(decision, tokens, latency, attempt, budget, raw, reasons, normalizations)
             except DecisionParseError as e:
                 code = e.code if isinstance(e, DecisionSemanticError) else "invalid_json"
@@ -267,6 +267,12 @@ class PEXAgent:
         )
 
     # ---- 3. select tag ---------------------------------------------------------
+    def output_schema(self):
+        return decision_json_schema(reasoning_first=self.reasoning_first)
+
+    def parse_output(self, text):
+        return parse_decision(text)
+
     def validate_output(self, decision: AgentDecision, snapshot: BlackboardSnapshot):
         """Validation hook for runners with additional output requirements."""
         return validate_decision(decision, snapshot)

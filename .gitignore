@@ -58,6 +58,8 @@ PROJECT_OVERVIEW.md
 
 # Generated benchmark runs and publication figures
 outputs/
+benchmark-cache/
+benchmark-results/
 
 # Presentation materials
 Project_Presentation/

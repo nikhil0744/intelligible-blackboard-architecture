@@ -1851,7 +1851,17 @@
         const opt = document.getElementById("liveScenarioOption");
         const sel = document.getElementById("scenarioSelect");
         if (opt && sel) {
-          opt.innerText = `🔴 Live Run: ${window.LIVE_TRACE_DATA.title || 'Latest Execution'}`;
+          const recorded = window.LIVE_TRACE_DATA.mode === "recorded_benchmark";
+          if (recorded) {
+            // A saved benchmark is playback. Remove demo choices and dormant sandbox
+            // controls so sample recovery scores cannot appear in its presentation.
+            for (const option of Array.from(sel.options)) {
+              if (option.value !== "live") option.remove();
+            }
+            document.getElementById("sandboxToggleBtn").style.display = "none";
+            document.getElementById("sandboxContainer").style.display = "none";
+          }
+          opt.innerText = `${recorded ? 'Recorded benchmark' : '🔴 Live Run'}: ${window.LIVE_TRACE_DATA.title || 'Latest Execution'}`;
           sel.value = "live";
         }
       } else {
