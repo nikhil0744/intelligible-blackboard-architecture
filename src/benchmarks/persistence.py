@@ -171,6 +171,11 @@ class RunStore:
         partial_calls = 0
         for attempt in records:
             path = self.root / "attempts" / attempt["attempt_id"] / "calls.jsonl"
+            if not path.exists() and attempt.get("committed") is False:
+                # The runtime may die between writing attempt.json and creating its
+                # ledgers. Keep that interrupted attempt without blocking a restart.
+                partial_calls += 1
+                continue
             for line in path.read_text().splitlines():
                 try:
                     call_records.append(CallRecord.model_validate_json(line))

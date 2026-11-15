@@ -148,8 +148,11 @@ def test_partial_attempt_retained_and_commit_corruption_rejected(prepared, tmp_p
                             {"storage": "persistent"})
     partial = store.start("task-0")
     partial.event("fixture_interrupted")
+    (partial.path / "calls.jsonl").unlink()  # interrupted during recorder initialization
     _, summary = resume_batch(store.root, prepared, model, SETTINGS, readiness=READINESS, observer=lambda e: None)
     assert summary["attempts"] == 4
+    assert summary["partial_call_records"] == 1
+    assert summary["usage_all_attempts"]["total_tokens"] is None
     assert partial.path.exists() and not (partial.path / "complete.json").exists()
     committed = next(p for p in (store.root / "attempts").iterdir() if (p / "complete.json").exists())
     (committed / "events.jsonl").write_text("tampered\n")
