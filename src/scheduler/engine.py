@@ -260,7 +260,8 @@ class DeterministicScheduler:
     def _invoke_agent_handler(self, handler: Any, turn: ScheduledTurn) -> AgentContribution:
         """Calls agent handler and normalizes response to an AgentContribution."""
         snap = self._get_current_snapshot()
-        current_step = len(snap.contributions) + 1
+        current_step = (self.store.next_turn_index(self.session_id)
+                        if hasattr(self.store, "next_turn_index") else len(snap.contributions) + 1)
 
         # Check if handler has generate_turn (e.g. MockPEXAgent)
         if hasattr(handler, "generate_turn"):
@@ -333,6 +334,9 @@ class DeterministicScheduler:
         if not all(e.tag == PXPTag.RATIFY for e in recent):
             return False
 
+        from prompts.validation import normalize_claim
+        if len({normalize_claim(e.prediction) for e in recent}) != 1:
+            return False
         distinct_agents = {e.agent_id for e in recent}
         return len(distinct_agents) >= min(self.consensus_threshold, len(self.registered_agents))
 

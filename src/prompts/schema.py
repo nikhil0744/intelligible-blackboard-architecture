@@ -61,9 +61,9 @@ class AgentDecision(BaseModel):
         )
 
 
-def decision_json_schema() -> Dict[str, Any]:
+def decision_json_schema(reasoning_first: bool = False) -> Dict[str, Any]:
     """Compact, self-contained JSON schema for constrained decoding (Ollama `format`)."""
-    return {
+    schema = {
         "type": "object",
         "properties": {
             "tag": {"type": "string", "enum": [t.value for t in PXPTag]},
@@ -90,3 +90,10 @@ def decision_json_schema() -> Dict[str, Any]:
         },
         "required": ["tag", "target_contribution_id", "prediction", "explanation"],
     }
+    if reasoning_first:
+        # Ordering is a decoding/prompt hint, not a semantic guarantee. Keep the
+        # same fields and validation contract while placing reasoning first.
+        order = ("explanation", "prediction", "tag", "target_contribution_id")
+        schema["properties"] = {key: schema["properties"][key] for key in order}
+        schema["required"] = list(order)
+    return schema

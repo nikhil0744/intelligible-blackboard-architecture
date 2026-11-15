@@ -15,6 +15,10 @@ from typing import Any, Dict, List
 from ..types import LLMError, LLMRequest, LLMResponse
 
 
+def _count(v: Any) -> Any:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
 class OllamaBackend:
     name = "ollama"
 
@@ -24,7 +28,7 @@ class OllamaBackend:
         self.num_ctx = num_ctx
 
     # -- helpers -----------------------------------------------------------
-    def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, path: str, body: Dict[str, Any], timeout_s: float | None = None) -> Dict[str, Any]:
         req = urllib.request.Request(
             self.host + path,
             data=json.dumps(body).encode("utf-8"),
@@ -32,21 +36,45 @@ class OllamaBackend:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            with urllib.request.urlopen(req, timeout=timeout_s or self.timeout_s) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise LLMError(f"Ollama HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:300]}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
 
-    def list_models(self) -> List[str]:
-        req = urllib.request.Request(self.host + "/api/tags")
+    def _get(self, path: str) -> Dict[str, Any]:
+        req = urllib.request.Request(self.host + path)
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                return json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, OSError) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
-        return [m["name"] for m in data.get("models", [])]
+
+    def version(self) -> str:
+        return str(self._get("/api/version").get("version", "unknown"))
+
+    def model_entries(self) -> List[Dict[str, Any]]:
+        """Pulled models with name, digest, size and details (quantization, family)."""
+        return list(self._get("/api/tags").get("models", []))
+
+    def list_models(self) -> List[str]:
+        return [m["name"] for m in self.model_entries()]
+
+    def running_models(self) -> List[Dict[str, Any]]:
+        """Models currently loaded in memory (size, size_vram)."""
+        return list(self._get("/api/ps").get("models", []))
+
+    def trained_context_length(self, model: str) -> Any:
+        """The model's own maximum context length, or None if Ollama does not report it."""
+        try:
+            info = self._post("/api/show", {"model": model}).get("model_info", {}) or {}
+        except LLMError:
+            return None
+        for key, value in info.items():
+            if key.endswith(".context_length") and isinstance(value, int):
+                return value
+        return None
 
     # -- LLMBackend --------------------------------------------------------
     def complete(self, request: LLMRequest, model: str) -> LLMResponse:
@@ -67,7 +95,10 @@ class OllamaBackend:
             body["format"] = request.json_schema
 
         t0 = time.perf_counter()
-        data = self._post("/api/chat", body)
+        if request.timeout_s is None:
+            data = self._post("/api/chat", body)
+        else:
+            data = self._post("/api/chat", body, min(self.timeout_s, request.timeout_s))
         latency = (time.perf_counter() - t0) * 1000
         if "error" in data:
             raise LLMError(f"Ollama error: {data['error']}")
@@ -75,7 +106,8 @@ class OllamaBackend:
             text=data.get("message", {}).get("content", ""),
             model=model,
             backend=self.name,
-            prompt_tokens=int(data.get("prompt_eval_count", 0) or 0),
-            completion_tokens=int(data.get("eval_count", 0) or 0),
+            # Ollama omits these counts in some cases (e.g. a fully cached prompt): report unknown, not 0.
+            prompt_tokens=_count(data.get("prompt_eval_count")),
+            completion_tokens=_count(data.get("eval_count")),
             latency_ms=latency,
         )
