@@ -26,7 +26,7 @@ These are profile results, not the official aggregate. An incorrect answer remai
 2. Run bootstrap. It checks out the notebook's immutable project revision and installs dependencies.
 3. Mount Drive, select one task for the first run, and run preparation.
 4. Run the experiment. Claims, PXP tags, requests and observations print as records are saved.
-5. Review grades in cell 5. In cell 6, paste an attempt ID from the results table to play that attempt, or leave it blank for the latest committed attempt. Download the bundle to present the viewer offline.
+5. Review grades in cell 5. In cell 6, choose a completed task or retry from the playback dropdown. Open `presentation/index.html` in the extracted ZIP to switch tasks offline. Download the bundle to present the viewer offline.
 
 Setup downloads about 1.5 GB of compressed Ollama runtime and 4.7 GB of model weights. Model files stay on local runtime disk; Drive holds the small benchmark cache and results. A new runtime downloads the model again. Setup checks GPU, RAM and disk, then uses the official user-space Linux archive without systemd or Docker. This recipe still requires fresh-Colab validation.
 
