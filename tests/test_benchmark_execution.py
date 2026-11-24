@@ -68,8 +68,8 @@ def decision(kind, tag, claim, target=None):
 
 class ScriptedBackend:
     name = "scripted-test"
-    def __init__(self, answer=6, tools=True):
-        self.answer, self.tools, self.calls, self.prompts = answer, tools, [], []
+    def __init__(self, answer=6):
+        self.answer, self.calls, self.prompts = answer, [], []
 
     def complete(self, request, model):
         self.prompts.append([m.content for m in request.messages])
@@ -78,12 +78,11 @@ class ScriptedBackend:
         root = re.search(r"Current claim root id=([^ .]+)", request.messages[0].content)
         if root:
             action = decision("final", "RATIFY", self.answer, root[1])
-        elif self.tools and "latest_tool_observations" not in user:
+        elif request.json_schema.get("title") == "ToolAction":
             action = {"kind": "tool", "name": "query", "arguments": {
                 "file": "input.csv", "aggregate": {"column": "value", "op": "sum"}}}
         else:
-            if self.tools:
-                assert '"value": 6.0' in user
+            assert '"value": 6.0' in user
             action = decision("final", "REVISE", self.answer)
         return LLMResponse(text=json.dumps(action), model=model, backend=self.name,
                            prompt_tokens=20, completion_tokens=10)
@@ -117,33 +116,68 @@ def test_actual_agents_tools_grade_and_per_attempt_usage(prepared, tmp_path):
     assert RunStore(store.root).summarize() == summary
 
 
-@pytest.mark.parametrize("repeat_request", [True, False])
-def test_tool_loop_yields_to_other_agents(prepared, tmp_path, repeat_request):
+def test_duplicate_inspection_then_query_yields_to_panel(prepared, tmp_path):
     class LoopingBackend(ScriptedBackend):
         def complete(self, request, model):
-            if request.agent_id == "analyst" and "Current claim root" not in request.messages[0].content:
-                if "Tools are closed" not in request.messages[0].content:
-                    return LLMResponse(text=json.dumps({"kind": "tool", "name": "query",
-                        "arguments": {"file": "input.csv", "limit": 1 if repeat_request else 2,
-                                      "aggregate": {"column": "value", "op": "sum"}}}),
-                        model=model, backend=self.name)
-                assert request.json_schema["properties"]["kind"]["enum"] == ["contribution", "final"]
+            if request.json_schema.get("title") == "ToolAction" and "duplicate" not in request.messages[0].content:
+                return LLMResponse(text=json.dumps({"kind": "tool", "name": "inspect",
+                                    "arguments": {"file": "input.csv"}}), model=model, backend=self.name)
+            if request.json_schema.get("title") == "OpeningSubmission":
                 assert '"value": 6.0' in request.messages[1].content
             return super().complete(request, model)
 
     model = broker(LoopingBackend())
+    events = []
     store, _ = run_batch(prepared, model, SETTINGS, tmp_path / "results", limit=1,
-                         limits=Limits(max_tool_rounds=8, max_tools_per_turn=4 if repeat_request else 1),
-                         readiness=READINESS, observer=lambda e: None)
+                         readiness=READINESS, observer=events.append)
     result = store.attempts()[0]
-    assert result["tool_rounds"] == 1
+    assert result["tool_rounds"] == 2
     assert result["turns"] == 4
     assert result["consensus"] and result["grade"]["correct"]
     assert {"analyst", "critic", "reasoner"} <= set(model.backend.calls)
+    order = [event["kind"] for event in events]
+    assert order.index("tool_request_blocked") < order.index("evidence_ready") < order.index("contribution")
+
+
+@pytest.mark.parametrize("action,status", [
+    (decision("contribution", "REVISE", 123456), "invalid_output"),
+    ({"kind": "tool", "name": "list_files", "arguments": {}}, "insufficient_evidence"),
+    ({"kind": "tool", "name": "calculate", "arguments": {"values": [float("inf")]}}, "invalid_output"),
+])
+def test_opening_cannot_post_without_csv_query(prepared, tmp_path, action, status):
+    class NoEvidenceBackend(ScriptedBackend):
+        def complete(self, request, model):
+            assert request.json_schema.get("title") == "ToolAction"
+            assert "use REVISE" not in request.messages[1].content
+            return LLMResponse(text=json.dumps(action), model=model, backend=self.name)
+
+    store, _ = run_batch(prepared, broker(NoEvidenceBackend()), SETTINGS, tmp_path / "results",
+                         limit=1, readiness=READINESS, observer=lambda e: None)
+    result = store.attempts()[0]
+    assert result["status"] == status
+    assert result["turns"] == 0 and result["output"] is None
+    assert result["grade"]["status"] == "no_final_submission"
+
+
+def test_repeated_disagreement_stops_before_turn_budget(prepared, tmp_path):
+    class StalledBackend(ScriptedBackend):
+        def complete(self, request, model):
+            root = re.search(r"Current claim root id=([^ .]+)", request.messages[0].content)
+            if root is None:
+                return super().complete(request, model)
+            tag = "REFUTE" if request.agent_id == "critic" else "REVISE"
+            action = decision("contribution", tag, self.answer, root[1])
+            return LLMResponse(text=json.dumps(action), model=model, backend=self.name)
+
+    store, summary = run_batch(prepared, broker(StalledBackend()), SETTINGS, tmp_path / "results",
+                               limit=1, readiness=READINESS, observer=lambda e: None)
+    result = store.attempts()[0]
+    assert result["status"] == "stalled" and result["turns"] < Limits().max_turns
+    assert not result["consensus"] and summary["stalled"] == 1
 
 
 def test_interrupt_after_commit_resume_preserves_wrong_answers(prepared, tmp_path):
-    model = broker(ScriptedBackend(answer=5, tools=False))
+    model = broker(ScriptedBackend(answer=5))
     saved = []
     def stop(event):
         if event["kind"] == "attempt_saved":
@@ -157,16 +191,16 @@ def test_interrupt_after_commit_resume_preserves_wrong_answers(prepared, tmp_pat
     assert summary["attempts"] == 3
     assert summary["incorrect"] == 3 and summary["correct"] == 0
     assert store.attempts()[0]["attempt_id"] == before["attempt_id"]
-    assert len(model.backend.calls) == 12
+    assert len(model.backend.calls) == 15
     # A second resume launches no calls, and incorrect results are still skipped.
     resume_batch(root, prepared, model, SETTINGS, readiness=READINESS, observer=lambda e: None)
-    assert len(model.backend.calls) == 12
+    assert len(model.backend.calls) == 15
     with pytest.raises(ValueError, match="Cannot resume"):
         resume_batch(root, prepared, model, replace(SETTINGS, temperature=.9), readiness=READINESS)
 
 
 def test_partial_attempt_retained_and_commit_corruption_rejected(prepared, tmp_path):
-    model = broker(ScriptedBackend(tools=False))
+    model = broker(ScriptedBackend())
     limits = Limits()
     config = configuration(prepared, SETTINGS, limits, 0, READINESS)
     store = RunStore.create(tmp_path / "run", config, [t.model_dump(mode="json") for t in prepared.tasks()],
@@ -247,9 +281,10 @@ def test_failed_cache_and_missing_model_have_no_fallback(prepared, tmp_path):
         check_readiness(broker(), SETTINGS, cpu_smoke=True)
 
 
-def test_reference_changes_do_not_reach_prompts_or_inputs(prepared, tmp_path):
+def test_reference_changes_do_not_reach_prompts_or_inputs(prepared, tmp_path, monkeypatch):
     from benchmarks.runtime import SessionRunner
     from benchmarks.persistence import Attempt
+    monkeypatch.setattr("benchmarks.runtime.uuid4", lambda: type("ID", (), {"hex": "fixture-request"})())
     captures = []
     for index, label in enumerate(["HIDDEN-LABEL-ONE", "HIDDEN-LABEL-TWO"]):
         workload = prepared.root / "workload/legal.json"
@@ -264,7 +299,7 @@ def test_reference_changes_do_not_reach_prompts_or_inputs(prepared, tmp_path):
         prepared.copy_inputs(task, path)
         assert sorted(p.name for p in path.iterdir()) == ["input.csv"]
         attempt = Attempt(tmp_path / f"attempt-{index}", {"session_id": "fixed-session", "attempt_id": str(index)})
-        model = broker(ScriptedBackend(tools=False))
+        model = broker(ScriptedBackend())
         result = SessionRunner(model, SETTINGS, Limits(max_turns=1)).execute(task, path, attempt)
         assert result["status"] == "turn_limit" and result["output"] == 6
         captures.append(model.backend.prompts)
@@ -284,7 +319,7 @@ def test_model_failure_unknown_usage_and_explicit_retry(prepared, tmp_path):
     assert summary["errored"] == 1 and summary["scored"] == 0
     assert summary["usage_all_attempts"]["total_tokens"] is None
     assert summary["usage_all_attempts"]["unknown_usage_calls"] == 1
-    successful = broker(ScriptedBackend(tools=False))
+    successful = broker(ScriptedBackend())
     _, skipped = resume_batch(store.root, prepared, successful, SETTINGS, readiness=READINESS, observer=lambda e: None)
     assert skipped["attempts"] == 1 and successful.backend.calls == []
     _, retried = resume_batch(store.root, prepared, successful, SETTINGS, readiness=READINESS,
@@ -299,9 +334,11 @@ def test_saved_trace_uses_actual_events_and_escapes_script_output(prepared, tmp_
         def complete(self, request, model):
             response = super().complete(request, model)
             action = json.loads(response.text)
+            if action["kind"] == "tool":
+                return response
             action["explanation"]["rationale"] = '</script><script>window.untrusted=true</script>'
             return response.model_copy(update={"text": json.dumps(action)})
-    store, _ = run_batch(prepared, broker(MarkupBackend(tools=False)), SETTINGS, tmp_path / "results",
+    store, _ = run_batch(prepared, broker(MarkupBackend()), SETTINGS, tmp_path / "results",
                          limit=1, readiness=READINESS, observer=lambda e: None)
     _, result, events = read_trace(store.root)
     rows = trace_table(store.root)
@@ -325,7 +362,7 @@ def test_persistence_failure_stops_before_next_task(prepared, tmp_path, monkeypa
             raise PersistenceError("fixture Drive full")
         return original(path, value)
     monkeypatch.setattr(module, "write_json", fail_commit)
-    model = broker(ScriptedBackend(tools=False))
+    model = broker(ScriptedBackend())
     with pytest.raises(PersistenceError, match="Drive full"):
         run_batch(prepared, model, SETTINGS, tmp_path / "results", readiness=READINESS, observer=lambda e: None)
-    assert len(model.backend.calls) == 4
+    assert len(model.backend.calls) == 5

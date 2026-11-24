@@ -28,6 +28,16 @@ class OllamaBackend:
         self.num_ctx = num_ctx
 
     # -- helpers -----------------------------------------------------------
+    @staticmethod
+    def _response_object(body: bytes) -> Dict[str, Any]:
+        try:
+            data = json.loads(body)
+        except ValueError as exc:
+            raise LLMError("Ollama returned invalid JSON") from exc
+        if not isinstance(data, dict):
+            raise LLMError("Ollama returned JSON that was not an object")
+        return data
+
     def _post(self, path: str, body: Dict[str, Any], timeout_s: float | None = None) -> Dict[str, Any]:
         req = urllib.request.Request(
             self.host + path,
@@ -37,7 +47,7 @@ class OllamaBackend:
         )
         try:
             with urllib.request.urlopen(req, timeout=timeout_s or self.timeout_s) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                return self._response_object(resp.read())
         except urllib.error.HTTPError as e:
             raise LLMError(f"Ollama HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:300]}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -47,7 +57,7 @@ class OllamaBackend:
         req = urllib.request.Request(self.host + path)
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                return self._response_object(resp.read())
         except (urllib.error.URLError, OSError) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
 
@@ -56,20 +66,30 @@ class OllamaBackend:
 
     def model_entries(self) -> List[Dict[str, Any]]:
         """Pulled models with name, digest, size and details (quantization, family)."""
-        return list(self._get("/api/tags").get("models", []))
+        return self._models("/api/tags")
 
     def list_models(self) -> List[str]:
         return [m["name"] for m in self.model_entries()]
 
     def running_models(self) -> List[Dict[str, Any]]:
         """Models currently loaded in memory (size, size_vram)."""
-        return list(self._get("/api/ps").get("models", []))
+        return self._models("/api/ps")
+
+    def _models(self, path: str) -> List[Dict[str, Any]]:
+        models = self._get(path).get("models")
+        if not isinstance(models, list) or not all(
+            isinstance(model, dict) and isinstance(model.get("name"), str) for model in models
+        ):
+            raise LLMError(f"Ollama {path} response has an invalid model list")
+        return models
 
     def trained_context_length(self, model: str) -> Any:
         """The model's own maximum context length, or None if Ollama does not report it."""
         try:
             info = self._post("/api/show", {"model": model}).get("model_info", {}) or {}
         except LLMError:
+            return None
+        if not isinstance(info, dict):
             return None
         for key, value in info.items():
             if key.endswith(".context_length") and isinstance(value, int):
@@ -102,8 +122,11 @@ class OllamaBackend:
         latency = (time.perf_counter() - t0) * 1000
         if "error" in data:
             raise LLMError(f"Ollama error: {data['error']}")
+        message = data.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+            raise LLMError("Ollama chat response is missing text content")
         return LLMResponse(
-            text=data.get("message", {}).get("content", ""),
+            text=message["content"],
             model=model,
             backend=self.name,
             # Ollama omits these counts in some cases (e.g. a fully cached prompt): report unknown, not 0.

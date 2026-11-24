@@ -30,7 +30,8 @@ OUTPUT_CONTRACT = """Respond with ONLY one JSON object, no prose, no markdown fe
  "explanation": {"rationale": "...", "evidence": ["..."], "assumptions": ["..."], "limitations": "..."}}"""
 
 
-def system_prompt(persona: Persona, extra_instructions: Optional[str] = None) -> str:
+def system_prompt(persona: Persona, extra_instructions: Optional[str] = None,
+                  output_contract: str = OUTPUT_CONTRACT) -> str:
     parts = [
         f"ROLE: {persona.title} ({persona.role.value.lower()}, domain: {persona.domain}).",
         f"EXPERTISE: {persona.expertise}",
@@ -38,7 +39,7 @@ def system_prompt(persona: Persona, extra_instructions: Optional[str] = None) ->
         "",
         PXP_RULES,
         "",
-        OUTPUT_CONTRACT,
+        output_contract,
     ]
     if extra_instructions:
         parts += ["", "ADDITIONAL INSTRUCTIONS (take priority):", extra_instructions]

@@ -23,7 +23,7 @@ from contracts.schemas import AgentContribution, BlackboardSnapshot, PXPTag
 from llm_broker.types import ChatMessage
 
 from .personas import Persona
-from .templates import _short, render_contribution, system_prompt
+from .templates import OUTPUT_CONTRACT, _short, render_contribution, system_prompt
 
 TokenCounter = Callable[[str], int]
 
@@ -92,9 +92,13 @@ def build_prompt(
     must_keep_ids: Sequence[str] = (),
     count_tokens: TokenCounter = estimate_tokens,
     max_context_chars: int = 6000,
+    *,
+    output_contract: str = OUTPUT_CONTRACT,
+    next_action: str = "Read the board and post your next contribution as JSON.",
+    empty_board: str = "(empty - you are posting the first hypothesis; use REVISE with target null)",
 ) -> Tuple[List[ChatMessage], PromptBudgetReport]:
     """Return (messages, report). With `token_budget=None` this is the unbudgeted prompt plus an estimate."""
-    system = system_prompt(persona, extra_instructions)
+    system = system_prompt(persona, extra_instructions, output_contract)
     contribs = snapshot.contributions
     protected = protected_ids(snapshot, must_keep_ids)
     report = PromptBudgetReport(
@@ -109,7 +113,7 @@ def build_prompt(
     report.context_chars_total = len(ctx_full)
     ctx = _short(ctx_full, max_context_chars) if ctx_full else ""
 
-    closing = f"\n\nYou are agent '{agent_id}'. Read the board and post your next contribution as JSON."
+    closing = f"\n\nYou are agent '{agent_id}'. {next_action}"
 
     def head(context: str) -> List[str]:
         lines = [f"TASK ({snapshot.task_id}):", snapshot.task_description.strip()]
@@ -159,8 +163,6 @@ def build_prompt(
     lines = list(head_lines)
     if report.omitted_contribution_ids:
         lines.append(f"(... {len(report.omitted_contribution_ids)} other posts omitted ...)")
-    lines += [rendered[c.contribution_id] for c in kept] or [
-        "(empty - you are posting the first hypothesis; use REVISE with target null)"
-    ]
+    lines += [rendered[c.contribution_id] for c in kept] or [empty_board]
     user = "\n".join(lines) + closing
     return [ChatMessage(role="system", content=system), ChatMessage(role="user", content=user)], report

@@ -34,7 +34,8 @@ def trace_table(run_dir, attempt_id=None):
                          "id": c["contribution_id"], "target": c["target_contribution_id"],
                          "content": c["payload"]["prediction"]["claim"],
                          "explanation/observation": c["payload"]["explanation"]["rationale"]})
-        elif kind in {"tool_requested", "tool_observed", "session_stopped", "evaluation"}:
+        elif kind in {"tool_requested", "tool_observed", "tool_request_blocked", "tools_closed", "evidence_ready",
+                      "discussion_stalled", "session_stopped", "evaluation"}:
             rows.append({"time": event["time"], "kind": kind, "agent": event.get("agent_id"),
                          "tag/tool": event.get("name"), "id": event.get("request_id"), "target": None,
                          "content": json.dumps({k: v for k, v in event.items() if k not in {"kind", "time"}}, ensure_ascii=False),

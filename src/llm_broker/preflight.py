@@ -10,6 +10,7 @@ data so it can be stored in a run manifest.
 
 from __future__ import annotations
 
+import json
 import platform
 import shutil
 import subprocess
@@ -42,7 +43,13 @@ def detect_gpus(run: Callable[..., Any] = subprocess.run) -> List[Dict[str, Any]
     for line in out.strip().splitlines():
         parts = [p.strip() for p in line.split(",")]
         if len(parts) == 3:
-            gpus.append({"name": parts[0], "memory_total_mb": int(float(parts[1])), "memory_free_mb": int(float(parts[2]))})
+            memory = []
+            for value in parts[1:]:
+                try:
+                    memory.append(int(float(value)))
+                except (ValueError, OverflowError):
+                    memory.append(None)
+            gpus.append({"name": parts[0], "memory_total_mb": memory[0], "memory_free_mb": memory[1]})
     return gpus
 
 
@@ -106,7 +113,12 @@ def run_preflight(broker: ModelBroker, settings: Optional[InferenceSettings] = N
             checks.append(_check("backend_reachable", False, f"{e} -> start it with `ollama serve`"))
             report["ok"] = False
             return report
-        entries = {m["name"]: m for m in be.model_entries()}
+        try:
+            entries = {m["name"]: m for m in be.model_entries()}
+        except LLMError as e:
+            checks.append(_check("model_available", False, str(e)))
+            report["ok"] = False
+            return report
         if model in entries:
             entry = entries[model]
             report["model_digest"] = entry.get("digest")
@@ -132,6 +144,8 @@ def run_preflight(broker: ModelBroker, settings: Optional[InferenceSettings] = N
             messages=[ChatMessage(role="user", content='Reply with the JSON object {"ok": true} and nothing else.')],
             temperature=settings.temperature, max_tokens=32, seed=0,
             agent_id="_preflight", metadata={"phase": "tool", "trial_id": "_preflight"},
+            json_schema={"type": "object", "properties": {"ok": {"type": "boolean"}},
+                         "required": ["ok"], "additionalProperties": False} if be.name == "ollama" else None,
         )
         t0 = time.perf_counter()
         try:
@@ -143,6 +157,14 @@ def run_preflight(broker: ModelBroker, settings: Optional[InferenceSettings] = N
                 "text": resp.text[:200],
             }
             checks.append(_check("probe_call", True, report["probe"]))
+            if be.name == "ollama":
+                try:
+                    reply = json.loads(resp.text)
+                except ValueError:
+                    reply = None
+                checks.append(_check("structured_probe",
+                                     isinstance(reply, dict) and set(reply) == {"ok"} and reply["ok"] is True,
+                                     "Expected a schema-constrained JSON object with ok=true"))
             checks.append(_check("usage_reported", resp.usage_known,
                                  "backend reports token counts" if resp.usage_known
                                  else "backend did not report token counts; usage will be recorded as unknown",
@@ -150,7 +172,12 @@ def run_preflight(broker: ModelBroker, settings: Optional[InferenceSettings] = N
         except LLMError as e:
             checks.append(_check("probe_call", False, str(e)))
         if be.name == "ollama":
-            loaded = {m.get("name"): m for m in be.running_models()}
+            try:
+                loaded = {m["name"]: m for m in be.running_models()}
+            except LLMError as e:
+                checks.append(_check("running_models", False, str(e)))
+                report["ok"] = False
+                return report
             m = loaded.get(model)
             if m:
                 size, vram = m.get("size") or 0, m.get("size_vram") or 0

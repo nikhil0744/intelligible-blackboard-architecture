@@ -38,6 +38,10 @@ class Limits:
 ROSTER = (("analyst", "data_analyst"), ("critic", "data_engineer"), ("reasoner", "general_reasoner"))
 
 
+class InsufficientEvidence(RuntimeError):
+    pass
+
+
 class BenchmarkScheduler(DeterministicScheduler):
     """Canonical scheduler with explicit three-person votes on the current revision."""
 
@@ -76,6 +80,8 @@ class SessionRunner:
         tools = DataTools(input_dir, task.files, timeout_s=self.limits.tool_timeout_s)
         observations = []
         tool_rounds = 0
+        latest_query = None
+        distinct_queries = set()
 
         def event(kind, **payload):
             attempt.event(kind, **payload)
@@ -83,8 +89,9 @@ class SessionRunner:
 
         def handler(agent):
             def turn(snapshot, scheduled):
-                nonlocal tool_rounds
+                nonlocal tool_rounds, latest_query
                 requests = set()
+                reminder = None
                 while True:
                     budget.check()
                     snapshot = board.get_snapshot(sid)
@@ -96,16 +103,30 @@ class SessionRunner:
                         stop_reason = None
                     if stop_reason:
                         event("tools_closed", agent_id=agent.agent_id, reason=stop_reason)
-                    action = agent.action(snapshot, tools_allowed=stop_reason is None)
+                    opening = not snapshot.contributions
+                    if opening and latest_query is not None:
+                        event("evidence_ready", agent_id=agent.agent_id, request_id=latest_query["request_id"])
+                        return agent.action(snapshot, phase="submit")
+                    if opening and stop_reason:
+                        raise InsufficientEvidence("Tool budget exhausted before a query returned usable data")
+                    phase = "collect" if opening else "review_closed" if stop_reason else "review"
+                    action = agent.action(snapshot, reminder, phase=phase)
                     if not isinstance(action, ToolAction):
                         return action
                     request = (action.name, json.dumps(action.arguments, sort_keys=True))
                     if request in requests:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
                               arguments=action.arguments, reason="duplicate_in_turn")
-                        return agent.action(snapshot, "This tool request already ran in this turn. Use the saved observation.",
-                                            tools_allowed=False)
+                        if not opening:
+                            return agent.action(snapshot, "This tool request already ran in this turn. Use the saved observation.",
+                                                phase="review_closed")
+                        # A failed investigation needs an alternative tool request, not an invented claim.
+                        if reminder:
+                            raise InsufficientEvidence("Repeated tool requests produced no usable CSV query")
+                        reminder = "Your last request was a duplicate. Use the observation and change your tool or arguments."
+                        continue
                     requests.add(request)
+                    reminder = None
                     request_id = uuid4().hex
                     tool_rounds += 1
                     event("tool_requested", request_id=request_id, agent_id=agent.agent_id,
@@ -121,13 +142,29 @@ class SessionRunner:
                                    "result": result}
                     encoded = json.dumps(observation, ensure_ascii=False)
                     if len(encoded) > 1600:
-                        observation["result"] = {"excerpt": json.dumps(result, ensure_ascii=False)[:1200],
-                                                 "truncated": True, "hint": "Narrow query/select/limit to inspect the needed data."}
+                        data = result.get("data")
+                        if action.name == "inspect" and isinstance(data, dict):
+                            observation["result"] = {
+                                "ok": result["ok"], "columns": data.get("columns", [])[:24],
+                                "raw_first_lines": [line[:140] for line in data.get("raw_first_lines", [])[:6]],
+                                "truncated": True,
+                            }
+                        else:
+                            observation["result"] = {"excerpt": json.dumps(result, ensure_ascii=False)[:1200],
+                                                     "truncated": True, "hint": "Narrow query/select/limit to inspect the needed data."}
                     if len(json.dumps(observation["arguments"])) > 400:
                         observation["arguments"] = {"excerpt": json.dumps(action.arguments)[:400], "truncated": True}
                     observations.append(observation)
+                    data = result.get("data")
+                    if (action.name == "query" and result.get("ok") and isinstance(data, dict)
+                            and data.get("matched_rows", 0) > 0
+                            and (data.get("value") is not None or data.get("rows"))):
+                        latest_query = observation
+                        distinct_queries.add(request)
                     recent = observations[-3:]
                     context = {"permitted_files": list(task.files), "latest_tool_observations": recent}
+                    if latest_query is not None and latest_query not in recent:
+                        context["latest_successful_query"] = latest_query
                     while len(json.dumps(context, ensure_ascii=False)) > 5500 and len(recent) > 1:
                         recent.pop(0)
                     board.update_context(sid, context)
@@ -149,6 +186,7 @@ class SessionRunner:
 
         error = None
         status = "turn_limit"
+        turn_signatures = []
         self.broker.response_hook = response_hook
         self.broker.ledger.attach_file(attempt.path / "calls.jsonl")
         try:
@@ -170,6 +208,15 @@ class SessionRunner:
                         status = "deadlock"
                         event("deadlock_detected", recovery_mode="disabled")
                         break
+                    turn_signatures.append((contribution.agent_id, contribution.tag,
+                                            normalize_claim(contribution.payload.prediction.claim), len(distinct_queries)))
+                    cycle = len(panel)
+                    if (len(turn_signatures) >= 2 * cycle
+                            and turn_signatures[-2 * cycle:-cycle] == turn_signatures[-cycle:]
+                            and any(item[1] in {PXPTag.REFUTE, PXPTag.REJECT} for item in turn_signatures[-cycle:])):
+                        status = "stalled"
+                        event("discussion_stalled", reason="Repeated disagreement without new CSV queries")
+                        break
         except AgentTurnError as exc:
             error = exc.to_record()
             # PEXAgent wraps a budget denial from the broker in AgentTurnError.
@@ -177,6 +224,8 @@ class SessionRunner:
             status = reason or exc.kind
         except BudgetExceeded as exc:
             status, error = exc.reason, {"error": str(exc)}
+        except InsufficientEvidence as exc:
+            status, error = "insufficient_evidence", {"error": str(exc)}
         except KeyboardInterrupt:
             status, error = "interrupted", {"error": "Stopped by user; resume restarts this task as a new attempt."}
         finally:

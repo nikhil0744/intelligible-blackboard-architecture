@@ -61,6 +61,16 @@ def _operation(root: str, allowed: tuple[str, ...], name: str, args: dict):
         return {"raw_first_lines": text.splitlines()[:12], "columns": list(df.columns), "rows": df.head(rows).to_dict("records"), "row_count": len(df)}
     filters = args.get("filters", [])
     if not isinstance(filters, list) or len(filters) > 10: raise ValueError("invalid filters")
+    requested_columns = [condition["column"] for condition in filters]
+    requested_columns.extend(args.get("group_by", []))
+    if not args.get("aggregate"):
+        requested_columns.extend(args.get("select", []))
+    if args.get("aggregate") and args["aggregate"]["op"] != "count":
+        requested_columns.append(args["aggregate"]["column"])
+    missing = [name for name in requested_columns if name not in df.columns]
+    if missing:
+        raise ValueError(f"Unknown CSV columns {missing!r} at header={header}. Parsed columns: {list(df.columns)!r}. "
+                         "Use inspect to find the row with the required column names.")
     for condition in filters:
         series = df[condition["column"]]
         op, value = condition["op"], condition["value"]

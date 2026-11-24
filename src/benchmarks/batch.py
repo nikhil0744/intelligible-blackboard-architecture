@@ -147,7 +147,9 @@ def execute_pending(store, prepared, broker, settings, limits, seed, observer, r
                 raise ValueError("saved solver input differs from prepared task; create a new run")
             previous = latest.get(task.task_id)
             if previous and previous["status"] != "interrupted":
-                failed = previous["status"] in {"error", "model_failure", "invalid_output", "evaluation_error", "time_limit", "call_limit", "tool_limit"}
+                failed = (previous["status"] in {"error", "model_failure", "invalid_output", "evaluation_error",
+                                                "time_limit", "call_limit", "tool_limit", "insufficient_evidence"}
+                          or previous.get("grade", {}).get("status") == "no_final_submission")
                 if not (retry_failures and failed):
                     observer({"kind": "task_skipped", "task_id": task.task_id, "reason": "already committed", "attempt_id": previous["attempt_id"]})
                     continue

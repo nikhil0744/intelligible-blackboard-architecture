@@ -67,6 +67,8 @@ Tools support listing, CSV inspection, filters, grouping, aggregation and bounde
 
 Full observations are saved; recent bounded observations return to prompts. Excerpts are marked, with a hint to narrow the query. Prompt truncation is recorded in contribution metadata.
 
+The opening agent may only request tools until a CSV query returns matching data. It then submits its own numeric answer with an explanation before the other agents review it. The controller records the query's request ID at the handoff. A listing, inspection, failed query, or empty query cannot open discussion. If evidence collection exhausts its tools, the run records `insufficient_evidence`. Two repeated rounds of the same disagreement without new successful queries stop as `stalled`. Both statuses are distinct from deadlock recovery and answer correctness.
+
 A revision starts a fresh claim. All three agents, including its author, must explicitly ratify that claim after the latest revision, and a final submission is required. Disagreement clears prior votes. Incompatible claims cannot establish consensus. The baseline stops at consensus, unresolved disagreement, resource limits, error or interruption. Recovery comparisons stay unavailable until baseline Colab/resume acceptance and separate recovery verification.
 
 The final numeric output is frozen before grading. The grader extracts only checksum-pinned `str_to_float`, `try_convert_to_number` and `Success` definitions, avoiding upstream imports that load hosted-model grading paths. Grading never feeds labels to agents and follows the pinned metric's numeric coercion/tolerances. Other official metrics are excluded.

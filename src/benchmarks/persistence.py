@@ -166,7 +166,9 @@ class RunStore:
         outcomes = [latest.get(tid, {"task_id": tid, "status": "pending"}) for tid in selected]
         scored = [r for r in outcomes if r.get("grade", {}).get("status") == "scored"]
         correct = sum(r.get("grade", {}).get("correct") is True for r in scored)
-        completed = sum(r["status"] in {"consensus", "deadlock", "turn_limit", "tool_limit", "call_limit", "time_limit"} for r in outcomes)
+        completed = sum(r["status"] in {"consensus", "deadlock", "stalled", "turn_limit",
+                                         "tool_limit", "call_limit", "time_limit", "insufficient_evidence"}
+                        for r in outcomes)
         call_records = []
         partial_calls = 0
         for attempt in records:
@@ -191,6 +193,8 @@ class RunStore:
                    "timed_out": sum(r["status"] == "time_limit" for r in outcomes),
                    "errored": sum(r["status"] in {"error", "invalid_output", "model_failure", "evaluation_error"} for r in outcomes),
                    "interrupted": sum(r["status"] == "interrupted" for r in outcomes),
+                   "insufficient_evidence": sum(r["status"] == "insufficient_evidence" for r in outcomes),
+                   "stalled": sum(r["status"] == "stalled" for r in outcomes),
                    "pending": sum(r["status"] == "pending" for r in outcomes),
                    "skipped": sum(r["status"] == "skipped" for r in outcomes),
                    "attempts": len(records), "partial_call_records": partial_calls,
