@@ -213,11 +213,12 @@ class RunStore:
         # CSV is derived, never the authoritative record.
         temporary = self.root / ".results.csv.tmp"
         with temporary.open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.DictWriter(stream, fieldnames=["task_id", "attempt_id", "status", "consensus", "score", "correct", "recovery_attempts", "recovery_confirmed", "elapsed_s", "total_tokens"])
+            writer = csv.DictWriter(stream, fieldnames=["task_id", "attempt_id", "status", "consensus", "metric", "score", "correct", "recovery_attempts", "recovery_confirmed", "elapsed_s", "total_tokens"])
             writer.writeheader()
             for r in outcomes:
                 writer.writerow({"task_id": r["task_id"], "attempt_id": r.get("attempt_id"), "status": r["status"],
                                  "consensus": r.get("consensus"), "score": r.get("grade", {}).get("score"),
+                                 "metric": r.get("grade", {}).get("metric"),
                                  "recovery_attempts": r.get("recovery", {}).get("attempts"),
                                  "recovery_confirmed": r.get("recovery", {}).get("confirmed"),
                                  "correct": r.get("grade", {}).get("correct"), "elapsed_s": r.get("elapsed_s"),

@@ -7,7 +7,10 @@ import pytest
 
 from agents.board_client import InMemoryBoard
 from benchmarks.actions import BenchmarkAgent, ToolAction
-from llm_broker import ChatMessage, LLMError, LLMRequest, ModelBroker
+from benchmarks.persistence import Attempt
+from benchmarks.preparation import TaskInput
+from benchmarks.runtime import Limits, SessionRunner
+from llm_broker import ChatMessage, InferenceSettings, LLMError, LLMRequest, LLMResponse, ModelBroker
 from llm_broker.backends.mock import MockBackend
 from llm_broker.backends.ollama import OllamaBackend
 from prompts import DecisionParseError, DecisionSemanticError
@@ -119,6 +122,71 @@ def test_model_repairs_keep_only_latest_error_and_phase_constraints():
     assert "Tools are closed" in backend.calls[2].messages[0].content
     assert [message.content for message in backend.calls[2].messages if message.role == "assistant"] == ["invalid-second"]
     assert contribution.metadata["raw_responses"][:2] == ["invalid-first", "invalid-second"]
+
+
+@pytest.mark.parametrize(("answer_type", "output", "schema_type"), [
+    ("numeric_approximate", 1.25, "number"),
+    ("string_exact", "No", "string"),
+    ("list_exact", [2022, 2024], "array"),
+    ("list_exact", ["Alabama", "Georgia"], "array"),
+])
+def test_submission_uses_task_answer_type(answer_type, output, schema_type):
+    response = {"kind": "final", "tag": "REVISE", "output": output, "confidence": 0.8,
+                "explanation": {"rationale": "The selected rows support the answer."}}
+    backend = MockBackend([json.dumps(response)])
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, answer_type=answer_type, max_parse_retries=0)
+        snapshot = InMemoryBoard().create_session("task", "Answer from the observed CSV data.")
+        contribution = agent.action(snapshot, phase="submit")
+        assert contribution.metadata["final_output"] == output
+        schema = backend.calls[0].json_schema["properties"]["output"]
+        assert schema["type"] == schema_type
+        wrong_value = "not a supported answer" if schema_type != "string" else ["No"]
+        with pytest.raises(DecisionParseError):
+            agent.parse_output(json.dumps({**response, "output": wrong_value}))
+
+
+def test_multifile_collects_each_source_and_preserves_advisory_evidence(tmp_path):
+    files = ("source-a.csv", "source-b.csv")
+    for filename in files:
+        (tmp_path / filename).write_text("Year,Count\n2022,2\n2024,4\n")
+    task = TaskInput(task_id="multi", question="Which years between 2022 and 2024 match?",
+                     files=files, answer_type="list_exact", scope_mode="advisory")
+    attempt = Attempt(tmp_path / "attempt", {"session_id": "s", "attempt_id": "a"})
+
+    class EvidenceBackend:
+        name = "fixture"
+        queries = 0
+
+        def complete(self, request, model):
+            system = request.messages[0].content
+            if request.json_schema.get("title") == "ToolAction":
+                filename, year = (files[0], 2022) if self.queries == 0 else (files[1], 2024)
+                self.queries += 1
+                action = {"kind": "tool", "name": "query",
+                          "arguments": {"file": filename, "filters": [{"column": "Year", "op": "eq", "value": year}]}}
+            else:
+                root = request.json_schema.get("$defs", {}).get("RootRatification")
+                explanation = {"rationale": "Both source CSVs were checked."}
+                if root:
+                    action = {"kind": "ratify", "target_contribution_id": root["properties"]["target_contribution_id"]["const"],
+                              "confidence": 1, "explanation": explanation}
+                else:
+                    assert self.queries == 2
+                    assert "query_evidence_by_file" in request.messages[1].content
+                    assert "scope_issues" in request.messages[1].content
+                    assert "JSON array" in system
+                    action = {"kind": "final", "tag": "REVISE", "output": [2022, 2024],
+                              "confidence": 1, "explanation": explanation}
+            return LLMResponse(text=json.dumps(action), model=model, backend=self.name)
+
+    events = []
+    settings = InferenceSettings(model="mock")
+    with ModelBroker(EvidenceBackend(), default_model="mock") as broker:
+        result = SessionRunner(broker, settings, Limits(), observer=events.append).execute(task, tmp_path, attempt)
+    assert result["status"] == "consensus" and result["output"] == [2022, 2024]
+    ready = next(event for event in events if event["kind"] == "evidence_ready")
+    assert len(ready["evidence_request_ids"]) == 2
 
 
 def test_ollama_wraps_incomplete_http_payload(monkeypatch):

@@ -5,6 +5,7 @@ import ast
 import hashlib
 import json
 import logging
+import math
 import os
 import shutil
 import tempfile
@@ -13,8 +14,21 @@ import urllib.request
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+# Per-answer dispatch in the pinned evaluator's answer_type_fixtures.json.
+# The first metric in each mapping is the run's primary score.
+_LOCAL_METRICS = {
+    "numeric_exact": {"success": "Success"},
+    "string_exact": {"success": "Success"},
+    "numeric_approximate": {
+        "rae_score": "RAEScore", "mean_absolute_error": "MeanAbsoluteError", "mean_squared_error": "MeanSquaredError",
+    },
+    "list_exact": {"f1": "F1", "precision": "Precision", "recall": "Recall"},
+}
 
 
 def resources():
@@ -36,6 +50,7 @@ class TaskInput(BaseModel):
     question: str = Field(min_length=1)
     files: tuple[str, ...]
     answer_type: str
+    scope_mode: Literal["strict", "advisory"] = "strict"
 
 
 def download(url: str) -> bytes:
@@ -103,17 +118,40 @@ class PreparedBenchmark:
     def _records(self):
         return {str(t["id"]): t for t in json.loads((self.root / self.spec["workload"]).read_text())}
 
+    def _csv_assets(self):
+        assets = {}
+        for asset in self.spec["assets"]:
+            path = Path(asset["path"])
+            if path.suffix != ".csv":
+                continue
+            if path.name in assets:
+                raise ValueError(f"CSV profile has ambiguous basename {path.name!r}")
+            assets[path.name] = path
+        return assets
+
+    def _answer_types(self):
+        return self.spec.get("answer_types", ["numeric_exact"])
+
     def tasks(self) -> list[TaskInput]:
         raw = self._records()
-        available_files = [Path(a["path"]).name for a in self.spec["assets"] if a["path"].endswith(".csv")]
+        available_files = self._csv_assets()
+        strict_tasks = set(self.spec.get("strict_scope_task_ids", self.spec["task_ids"]))
         # Explicit allowlist: no labels, solution steps, subtasks, or raw metadata.
         tasks = []
         for tid in self.spec["task_ids"]:
             record = raw[tid]
-            if record["answer_type"] != "numeric_exact" or not record["data_sources"] or not set(record["data_sources"]) <= set(available_files):
-                raise ValueError(f"Task {tid} is incompatible with the pinned numeric CSV profile")
+            answer_type = record["answer_type"]
+            paths = [Path(source) for source in record["data_sources"]]
+            if answer_type not in self._answer_types() or answer_type not in _LOCAL_METRICS or not paths:
+                raise ValueError(f"Task {tid} is incompatible with the pinned CSV grading profile")
+            for source in paths:
+                asset = available_files.get(source.name)
+                if (source.is_absolute() or ".." in source.parts or asset is None
+                        or asset.parts[-len(source.parts):] != source.parts):
+                    raise ValueError(f"Task {tid} refers to an unpinned or ambiguous CSV: {source}")
             tasks.append(TaskInput(task_id=tid, question=record["query"],
-                                   files=tuple(record["data_sources"]), answer_type=record["answer_type"]))
+                                   files=tuple(path.name for path in paths), answer_type=answer_type,
+                                   scope_mode="strict" if tid in strict_tasks else "advisory"))
         return tasks
 
     def coverage(self):
@@ -121,34 +159,55 @@ class PreparedBenchmark:
         return {"profile": self.spec["profile"], "selected_task_ids": self.spec["task_ids"],
                 "total_domain_tasks": len(records), "eligible_tasks": len(self.spec["task_ids"]),
                 "excluded_task_ids": sorted(set(records) - set(self.spec["task_ids"])),
-                "metrics": ["success"], "unavailable_metrics": ["pipeline", "hosted_judge", "subtasks"],
+                "metrics": sorted({metric for kind in self._answer_types() for metric in _LOCAL_METRICS[kind]}),
+                "unavailable_metrics": ["pipeline", "hosted_judge", "subtasks"],
                 "note": self.spec["coverage_note"]}
 
     def copy_inputs(self, task: TaskInput, target: Path):
         target.mkdir(parents=True, exist_ok=False)
-        assets = {Path(a["path"]).name: a["path"] for a in self.spec["assets"] if a["path"].endswith(".csv")}
+        assets = self._csv_assets()
         for name in task.files:
             shutil.copyfile(self.root / assets[name], target / name)
 
     def evaluate(self, task_id: str, output):
         if task_id not in self.spec["task_ids"]:
             raise ValueError("task is outside the declared grading profile")
+        record = self._records()[task_id]
+        answer_type = record["answer_type"]
+        if answer_type not in self._answer_types() or answer_type not in _LOCAL_METRICS:
+            raise ValueError("answer type is outside the declared grading profile")
+        dispatch = _LOCAL_METRICS[answer_type]
+        primary = next(iter(dispatch))
         if output is None:
-            return {"metric": "success", "score": 0, "correct": False, "status": "no_final_submission"}
-        # Execute only three audited, checksum-pinned definitions; importing the upstream
-        # module would initialize hosted-model grading paths. No solver text is executed.
+            return {"metric": primary, "score": 0, "correct": False, "status": "no_final_submission"}
+        reference = record["answer"]  # accessed only after output is frozen
+        if answer_type == "list_exact" and (
+            not isinstance(output, list) or not isinstance(reference, list)
+            or any(type(item) not in (str, int, float) for item in (*output, *reference))
+        ):
+            # Typed lists keep the upstream F1 string-to-list eval fallback unreachable.
+            raise ValueError("list_exact grading requires lists of strings or numbers")
+        # Execute only audited, checksum-pinned local definitions.
         metric_path = self.root / "benchmark/metrics.py"
         asset = next(a for a in self.spec["assets"] if a["path"] == "benchmark/metrics.py")
         if digest(metric_path) != asset["sha256"]:
             raise ValueError("evaluator checksum changed")
         tree = ast.parse(metric_path.read_text())
-        names = {"str_to_float", "try_convert_to_number", "Success"}
+        names = {"str_to_float", "try_convert_to_number", *dispatch.values()}
         definitions = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and n.name in names]
         if {n.name for n in definitions} != names:
             raise ValueError("pinned metric definitions missing")
-        namespace = {"Metric": object, "logging": logging}
+        namespace = {"Metric": object, "logging": logging, "List": list}
         exec(compile(ast.Module(body=definitions, type_ignores=[]), str(metric_path), "exec"), namespace)
-        reference = self._records()[task_id]["answer"]  # accessed only after output is frozen
-        score = namespace["Success"]()(output, reference)[0]
-        return {"metric": "success", "score": score, "correct": bool(score), "status": "scored",
+        metrics = {}
+        for name, cls in dispatch.items():
+            value = namespace[cls]()(output, reference)[0]
+            metrics[name] = value if value is not None and math.isfinite(value) else None
+        score = metrics[primary]
+        if score is None:
+            raise ValueError("non-finite primary grade")
+        result = {"metric": primary, "score": score, "correct": score == 1, "status": "scored",
                 "evaluator_revision": self.spec["revision"], "official_aggregate": False}
+        if len(metrics) > 1:
+            result["metrics"] = metrics
+        return result

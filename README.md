@@ -62,7 +62,7 @@ Open <http://localhost:5173>. The dashboard includes demo data. Build it with `n
 
 ## Verification and examples
 
-For the real, API-free KramaBench pilot, use the [Colab benchmark notebook](notebooks/colab_benchmarks.ipynb) and [usage guide](docs/guides/colab-benchmarks.md). It supports three pinned legal CSV tasks, durable attempts and resume. New runs enable bounded evidence backtracking by default. Turn recovery off for a baseline comparison. MedAgentBench remains unavailable in this pilot.
+For the real, API-free KramaBench pilot, use the [Colab benchmark notebook](notebooks/colab_benchmarks.ipynb) and [usage guide](docs/guides/colab-benchmarks.md). Choose the 20-task legal CSV profile or the original three-task pilot. Completed attempts are saved individually, and batches can resume from Drive. New runs enable bounded evidence backtracking by default. Turn recovery off for a baseline comparison. MedAgentBench remains unavailable in this pilot.
 
 ```bash
 python -m pytest -q

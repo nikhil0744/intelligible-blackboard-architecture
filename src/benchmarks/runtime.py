@@ -57,10 +57,14 @@ def _query_signature(args):
         encoded_filters = sorted(json.dumps({key: value_key(value) for key, value in entry.items()},
                                             sort_keys=True) for entry in args.get("filters", []))
         aggregate = args.get("aggregate") or {}
+        grouping = args.get("group_by", [])
+        row_options = [args.get("sort"), args.get("offset", 0), args.get("limit", 10)] if not aggregate or grouping else []
+        first_per = args.get("first_per")
         return json.dumps([args.get("file"), args.get("header"), encoded_filters,
                            {key: value_key(value) for key, value in aggregate.items()},
-                           [value_key(col) for col in args.get("group_by", [])],
-                           [value_key(col) for col in args.get("select", [])] if not aggregate else []],
+                           [value_key(col) for col in grouping],
+                           [value_key(col) for col in args.get("select", [])] if not aggregate else [],
+                           args.get("derive"), first_per, args.get("sort") if first_per else None, row_options],
                           sort_keys=True)
     except (AttributeError, TypeError):
         # The tool executor will return validation diagnostics for malformed arguments.
@@ -70,12 +74,16 @@ def _query_signature(args):
 class BenchmarkScheduler(DeterministicScheduler):
     """Canonical scheduler with explicit three-person votes on the current revision."""
 
+    def __init__(self, *args, answer_type="numeric_exact", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.answer_type = answer_type
+
     def vote_state(self, snapshot):
         root = active_root(snapshot)
         votes = set()
         final = False
         if root:
-            claim = benchmark_claim_key(root.payload.prediction.claim)
+            claim = benchmark_claim_key(root.payload.prediction.claim, self.answer_type)
             for c in snapshot.contributions[root.turn_index:]:
                 if root_id(snapshot, c.contribution_id) != root.contribution_id:
                     continue
@@ -83,7 +91,7 @@ class BenchmarkScheduler(DeterministicScheduler):
                     votes.clear()
                 if c.metadata.get("final_submission"):
                     final = True
-                if c.tag == PXPTag.RATIFY and benchmark_claim_key(c.payload.prediction.claim) == claim:
+                if c.tag == PXPTag.RATIFY and benchmark_claim_key(c.payload.prediction.claim, self.answer_type) == claim:
                     votes.add(c.agent_id)
         return {
             "claim_id": root.contribution_id if root else None,
@@ -113,6 +121,10 @@ class SessionRunner:
         observations = []
         tool_rounds = 0
         latest_query = None
+        novel_query = None
+        evidence_by_file = {}
+        strict_scope = task.scope_mode == "strict"
+        multi_file = len(task.files) > 1
         distinct_queries = set()
         inspected_headers: dict[str, int] = {}
         branch = "main"
@@ -126,9 +138,12 @@ class SessionRunner:
             attempt.event(kind, **payload)
             self.observer({"kind": kind, "task_id": task.task_id, **payload})
 
+        def has_evidence():
+            return set(task.files) <= evidence_by_file.keys() and (branch == "main" or novel_query is not None)
+
         def handler(agent):
             def turn(snapshot, scheduled):
-                nonlocal tool_rounds, latest_query
+                nonlocal tool_rounds, latest_query, novel_query
                 requests = set()
                 reminder = None
                 while True:
@@ -136,6 +151,10 @@ class SessionRunner:
                     snapshot = board.get_snapshot(sid)
                     vote_state = scheduler.vote_state(snapshot)
                     snapshot.initial_context = {**snapshot.initial_context, "votes": vote_state}
+                    if multi_file:
+                        snapshot.initial_context["evidence_pending_files"] = [
+                            file for file in task.files if file not in evidence_by_file
+                        ]
                     if tool_rounds >= self.limits.max_tool_rounds:
                         stop_reason = "session_tool_budget"
                     elif branch == "recovery" and tool_rounds - recovery_tool_start >= self.limits.max_recovery_tool_rounds:
@@ -148,11 +167,11 @@ class SessionRunner:
                         event("tools_closed", agent_id=agent.agent_id, reason=stop_reason)
                     opening = not snapshot.contributions
                     if opening and stop_reason:
-                        if latest_query is None:
-                            raise InsufficientEvidence("Tool budget exhausted before a query returned usable, in-scope data")
+                        if not has_evidence():
+                            raise InsufficientEvidence("Tool budget exhausted before collecting the required CSV evidence")
                         return agent.action(snapshot, phase="submit")
                     if opening:
-                        phase = "opening" if latest_query is not None else "collect"
+                        phase = "opening" if has_evidence() else "collect"
                     else:
                         phase = "review_closed" if stop_reason else "review"
                     action = agent.action(snapshot, reminder, phase=phase)
@@ -166,11 +185,11 @@ class SessionRunner:
                         args["header"] = inspected_headers[file]
                     request = (action.name, json.dumps(args, sort_keys=True))
                     query = _query_signature(args) if action.name == "query" else None
-                    if branch == "recovery" and opening and query in prior_queries:
+                    if branch == "recovery" and opening and not multi_file and query in prior_queries:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
                               arguments=args, reason="prior_branch_query")
-                        if latest_query is not None:
-                            return agent.action(snapshot, "Use the new evidence and submit your numeric claim.", phase="submit")
+                        if has_evidence():
+                            return agent.action(snapshot, "Use the new evidence and submit your answer.", phase="submit")
                         if reminder:
                             raise InsufficientEvidence("Recovery repeatedly requested the same prior-branch query")
                         reminder = "That query already ran in the prior branch. Choose a different scope, measure, or raw row query."
@@ -178,7 +197,7 @@ class SessionRunner:
                     if request in requests:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
                               arguments=args, reason="duplicate_in_turn")
-                        if opening and latest_query is not None:
+                        if opening and has_evidence():
                             return agent.action(snapshot, "You already have usable data. Check its scope and submit.",
                                                 phase="submit")
                         if not opening:
@@ -217,6 +236,7 @@ class SessionRunner:
                             observation["result"] = {
                                 "ok": result["ok"], "header": data.get("header"), "columns": data.get("columns", [])[:24],
                                 "suggested_header": data.get("suggested_header"),
+                                "header_candidates": data.get("header_candidates", [])[:8],
                                 "raw_first_lines": [line[:140] for line in data.get("raw_first_lines", [])[:6]],
                                 "truncated": True,
                             }
@@ -231,37 +251,49 @@ class SessionRunner:
                     data = result.get("data")
                     if scope_issues:
                         event("query_scope_mismatch", agent_id=agent.agent_id, request_id=request_id, issues=scope_issues)
-                    if (action.name == "query" and result.get("ok") and isinstance(data, dict) and not scope_issues
+                    if (action.name == "query" and result.get("ok") and isinstance(data, dict)
+                            and (not strict_scope or not scope_issues)
                             and data.get("matched_rows", 0) > 0
                             and (data.get("value") is not None or data.get("rows"))):
-                        if opening and latest_query is None:
-                            event("evidence_ready", agent_id=agent.agent_id, request_id=request_id)
+                        had_evidence = has_evidence()
                         latest_query = observation
+                        evidence_by_file[file] = observation
+                        if branch == "recovery" and query not in prior_queries:
+                            novel_query = observation
+                        if opening and not had_evidence and has_evidence():
+                            event("evidence_ready", agent_id=agent.agent_id, request_id=request_id,
+                                  evidence_request_ids=[evidence_by_file[name]["request_id"] for name in task.files])
                         distinct_queries.add(request)
                     recent = observations[-3:]
-                    context = {"permitted_files": list(task.files), "latest_tool_observations": recent}
+                    context = {"permitted_files": list(task.files), "answer_type": task.answer_type}
+                    if multi_file:
+                        context["query_evidence_by_file"] = evidence_by_file
+                        recent = [observation for observation in recent if observation not in evidence_by_file.values()]
+                    elif latest_query is not None and latest_query not in recent:
+                        context["latest_successful_query"] = latest_query
                     if recovery_context is not None:
                         context["recovery"] = recovery_context
-                    if latest_query is not None and latest_query not in recent:
-                        context["latest_successful_query"] = latest_query
-                    while len(json.dumps(context, ensure_ascii=False)) > 5500 and len(recent) > 1:
+                    context["latest_tool_observations"] = recent
+                    while len(json.dumps(context, ensure_ascii=False)) > 5500 and recent:
                         recent.pop(0)
                     board.update_context(sid, context)
             return turn
 
         panel = [BenchmarkAgent(name, persona, self.broker, model=self.settings.model,
-                                seed=self.seed, counterfactual_capable=False, **self.settings.agent_kwargs())
+                                seed=self.seed, counterfactual_capable=False, answer_type=task.answer_type,
+                                **self.settings.agent_kwargs())
                  for name, persona in ROSTER]
 
         def new_board(context):
             store = InMemoryBoard()
             store.create_session(task.task_id, task.question, context, sid)
-            engine = BenchmarkScheduler(sid, store, policy=RoundRobinPolicy(), deadlock_window=2, consensus_threshold=3)
+            engine = BenchmarkScheduler(sid, store, policy=RoundRobinPolicy(), deadlock_window=2,
+                                        consensus_threshold=3, answer_type=task.answer_type)
             for agent in panel:
                 engine.register_agent(agent.agent_id, agent.role, handler(agent))
             return store, engine
 
-        board, scheduler = new_board({"permitted_files": list(task.files)})
+        board, scheduler = new_board({"permitted_files": list(task.files), "answer_type": task.answer_type})
         old_hook = self.broker.response_hook
 
         def response_hook(request, response):
@@ -290,7 +322,8 @@ class SessionRunner:
                     if branch == "recovery" and contribution.tag == PXPTag.REVISE and contribution.metadata.get("final_submission"):
                         event("recovery_candidate", contribution_id=contribution.contribution_id,
                               claim=contribution.payload.prediction.claim,
-                              evidence_request_id=latest_query["request_id"],
+                              evidence_request_id=novel_query["request_id"],
+                              evidence_request_ids=[evidence_by_file[name]["request_id"] for name in task.files],
                               source_claim=recovery_context["source_claim"])
                     if snapshot.status == BlackboardStatus.CONSENSUS:
                         return "consensus", None
@@ -298,7 +331,8 @@ class SessionRunner:
                         event("deadlock_detected", recovery_mode=recovery_mode)
                         return "deadlock", None
                     turn_signatures.append((contribution.agent_id, contribution.tag,
-                                            benchmark_claim_key(contribution.payload.prediction.claim), len(distinct_queries)))
+                                            benchmark_claim_key(contribution.payload.prediction.claim, task.answer_type),
+                                            len(distinct_queries)))
                     cycle = len(panel)
                     if (len(turn_signatures) >= 2 * cycle
                             and turn_signatures[-2 * cycle:-cycle] == turn_signatures[-cycle:]
@@ -342,16 +376,23 @@ class SessionRunner:
                         }
                         if latest_query is not None:
                             recovery_context["prior_query"] = latest_query
+                        if multi_file:
+                            recovery_context["instruction"] += (
+                                " Recheck each file. At least one supporting query must differ from the prior branch."
+                            )
                         recovery_context["recent_prior_observations"] = observations[-2:]
                         observations = []
                         latest_query = None
+                        novel_query = None
+                        evidence_by_file = {}
                         branch = "recovery"
                         recovery_tool_start = tool_rounds
                         recovery.update(attempts=1, reason=status)
                         event("recovery_started", reason=status, parent_branch="main", checkpoint="before_opening_claim",
                               source_contribution_id=source_root.contribution_id if source_root else None,
                               source_claim=recovery_context["source_claim"])
-                        board, scheduler = new_board({"permitted_files": list(task.files), "recovery": recovery_context})
+                        board, scheduler = new_board({"permitted_files": list(task.files), "answer_type": task.answer_type,
+                                                      "recovery": recovery_context})
                         with usage_scope(phase="candidate_replay"):
                             recovered_status, recovered_error = run_branch(recovery_turns)
                         candidate = active_root(board.get_snapshot(sid))

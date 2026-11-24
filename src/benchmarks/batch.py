@@ -65,13 +65,13 @@ def check_readiness(broker, settings, cpu_smoke=False):
 
 
 def configuration(prepared, settings, limits, seed, report, cpu_smoke=False):
-    return {"benchmark": "kramabench", "resources": prepared.spec,
+    return {"benchmark": prepared.spec.get("benchmark_key", "kramabench"), "resources": prepared.spec,
             "model_digest": report["model_digest"], "backend_version": report.get("backend_version"),
             "inference": settings.to_dict(), "limits": asdict(limits), "seed": seed,
             "roster": [dict(agent_id=a, persona=p, counterfactual_capable=False) for a, p in ROSTER],
             "recovery_mode": "bounded_evidence_backtrack" if limits.recovery_enabled else "disabled", "cpu_smoke": cpu_smoke,
             "code_sha256": source_identity()["source_sha256"], "packages": package_identity(),
-            "grading": "pinned Success metric; selected numeric_exact tasks; no official aggregate"}
+            "grading": prepared.spec.get("grading_note", "pinned Success metric; selected numeric_exact tasks; no official aggregate")}
 
 
 def select_tasks(prepared, limit=3, task_ids=None):

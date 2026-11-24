@@ -19,13 +19,13 @@ def main(argv=None):
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--cpu-smoke", action="store_true")
     prep = commands.add_parser("prepare")
-    prep.add_argument("--benchmark", choices=["kramabench", "medagentbench"], default="kramabench")
+    prep.add_argument("--benchmark", choices=["kramabench", "kramabench20", "medagentbench"], default="kramabench")
     prep.add_argument("--cache-dir", type=Path, default=Path("outputs/benchmark-cache"))
     run = commands.add_parser("run")
-    run.add_argument("--benchmark", choices=["kramabench", "medagentbench"], default="kramabench")
+    run.add_argument("--benchmark", choices=["kramabench", "kramabench20", "medagentbench"], default="kramabench")
     run.add_argument("--cache-dir", type=Path, default=Path("outputs/benchmark-cache"))
     run.add_argument("--results-dir", type=Path, required=True)
-    run.add_argument("--limit", type=int, default=3)
+    run.add_argument("--limit", type=int, help="Maximum selected tasks (defaults to the full profile)")
     run.add_argument("--task-ids", nargs="+")
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--max-turns", type=int, default=15)
@@ -64,13 +64,14 @@ def main(argv=None):
                 report = check_readiness(broker, settings, args.cpu_smoke)
                 print(json.dumps({"inference": report, "benchmarks": resources()}, indent=2))
             else:
-                prepared = PreparedBenchmark.open(args.cache_dir)
+                benchmark = saved["benchmark"] if args.command == "resume" else args.benchmark
+                prepared = PreparedBenchmark.open(args.cache_dir, benchmark)
                 if args.command == "resume":
                     store, report = resume_batch(args.run_dir, prepared, broker, settings,
                                                   cpu_smoke=args.cpu_smoke, retry_failures=args.retry_failures)
                 else:
                     store, report = run_batch(prepared, broker, settings, args.results_dir,
-                        limit=args.limit, task_ids=args.task_ids, seed=args.seed,
+                        limit=len(prepared.spec["task_ids"]) if args.limit is None else args.limit, task_ids=args.task_ids, seed=args.seed,
                         limits=Limits(recovery_enabled=not args.no_recovery, max_turns=args.max_turns, task_timeout_s=args.task_timeout_s,
                                       run_timeout_s=args.run_timeout_s),
                         cpu_smoke=args.cpu_smoke, temporary=args.temporary)
