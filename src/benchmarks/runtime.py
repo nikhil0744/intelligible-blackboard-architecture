@@ -82,6 +82,7 @@ class SessionRunner:
         tool_rounds = 0
         latest_query = None
         distinct_queries = set()
+        inspected_headers: dict[str, int] = {}
 
         def event(kind, **payload):
             attempt.event(kind, **payload)
@@ -113,10 +114,16 @@ class SessionRunner:
                     action = agent.action(snapshot, reminder, phase=phase)
                     if not isinstance(action, ToolAction):
                         return action
-                    request = (action.name, json.dumps(action.arguments, sort_keys=True))
+                    args = action.arguments.copy()
+                    file = args.get("file")
+                    inherited_header = (action.name == "query" and "header" not in args
+                                        and isinstance(file, str) and file in inspected_headers)
+                    if inherited_header:
+                        args["header"] = inspected_headers[file]
+                    request = (action.name, json.dumps(args, sort_keys=True))
                     if request in requests:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
-                              arguments=action.arguments, reason="duplicate_in_turn")
+                              arguments=args, reason="duplicate_in_turn")
                         if not opening:
                             return agent.action(snapshot, "This tool request already ran in this turn. Use the saved observation.",
                                                 phase="review_closed")
@@ -130,22 +137,25 @@ class SessionRunner:
                     request_id = uuid4().hex
                     tool_rounds += 1
                     event("tool_requested", request_id=request_id, agent_id=agent.agent_id,
-                          name=action.name, arguments=action.arguments, board_version=snapshot.version,
+                          name=action.name, arguments=args, header_inherited=inherited_header, board_version=snapshot.version,
                           turn_index=len(snapshot.contributions), branch="main")
                     tools.timeout_s = min(self.limits.tool_timeout_s, budget.remaining())
-                    result = tools.execute(request_id, action.name, action.arguments)
+                    result = tools.execute(request_id, action.name, args)
                     event("tool_observed", request_id=request_id, agent_id=agent.agent_id, result=result)
+                    data = result.get("data")
+                    if action.name == "inspect" and isinstance(file, str) and isinstance(data, dict) and "header" in data:
+                        inspected_headers[file] = data["header"]
                     # Keep recent observations inside the ordinary prompt budget. Complete
                     # observations stay in the durable event log, never silently in a cache.
                     observation = {"request_id": request_id, "agent_id": agent.agent_id,
-                                   "name": action.name, "arguments": action.arguments,
+                                   "name": action.name, "arguments": args,
                                    "result": result}
                     encoded = json.dumps(observation, ensure_ascii=False)
                     if len(encoded) > 1600:
                         data = result.get("data")
                         if action.name == "inspect" and isinstance(data, dict):
                             observation["result"] = {
-                                "ok": result["ok"], "columns": data.get("columns", [])[:24],
+                                "ok": result["ok"], "header": data.get("header"), "columns": data.get("columns", [])[:24],
                                 "raw_first_lines": [line[:140] for line in data.get("raw_first_lines", [])[:6]],
                                 "truncated": True,
                             }
@@ -153,7 +163,7 @@ class SessionRunner:
                             observation["result"] = {"excerpt": json.dumps(result, ensure_ascii=False)[:1200],
                                                      "truncated": True, "hint": "Narrow query/select/limit to inspect the needed data."}
                     if len(json.dumps(observation["arguments"])) > 400:
-                        observation["arguments"] = {"excerpt": json.dumps(action.arguments)[:400], "truncated": True}
+                        observation["arguments"] = {"excerpt": json.dumps(args)[:400], "truncated": True}
                     observations.append(observation)
                     data = result.get("data")
                     if (action.name == "query" and result.get("ok") and isinstance(data, dict)

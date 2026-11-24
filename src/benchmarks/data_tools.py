@@ -12,8 +12,10 @@ TOOL_HELP = """Tools (arguments are JSON, never Python):
 list_files {} -> permitted CSV names
 inspect {file, header?:0, rows?:8} -> raw first lines, schema and rows; header is a zero-based row number
   For CSVs with title or preamble rows, choose the row with the real column names.
-query {file, header?:0, filters?:[{column,op,value}], select?:[columns], aggregate?:{column?,op}, group_by?:[columns], limit?:10}
-  filters: eq, ne, contains, gt, ge, lt, le; contains is literal/case-insensitive.
+query {file, header?, filters?:[{column,op,value}], select?:[columns], aggregate?:{column?,op}, group_by?:[columns], limit?:10}
+  A query without header reuses the last inspected header for that file, or 0 before inspection.
+  filters: eq, ne, in, contains, gt, ge, lt, le. Use a list of strings or numbers for in.
+  contains is literal/case-insensitive.
   aggregate: count (rows), sum, mean, min, max. Numeric conversion strips commas, $, %, K/M/B unit suffixes;
   it retains displayed magnitude (e.g. $2,089M -> 2089), NOT scaled dollars. Filter out footer rows first.
 calculate {op:add|subtract|multiply|divide, values:[numbers], digits?:integer}
@@ -58,7 +60,8 @@ def _operation(root: str, allowed: tuple[str, ...], name: str, args: dict):
     if name == "inspect":
         rows = args.get("rows", 8)
         if type(rows) is not int or not 1 <= rows <= 20: raise ValueError("rows must be 1–20")
-        return {"raw_first_lines": text.splitlines()[:12], "columns": list(df.columns), "rows": df.head(rows).to_dict("records"), "row_count": len(df)}
+        return {"header": header, "raw_first_lines": text.splitlines()[:12], "columns": list(df.columns),
+                "rows": df.head(rows).to_dict("records"), "row_count": len(df)}
     filters = args.get("filters", [])
     if not isinstance(filters, list) or len(filters) > 10: raise ValueError("invalid filters")
     requested_columns = [condition["column"] for condition in filters]
@@ -75,6 +78,16 @@ def _operation(root: str, allowed: tuple[str, ...], name: str, args: dict):
         series = df[condition["column"]]
         op, value = condition["op"], condition["value"]
         if op == "contains": mask = series.str.contains(str(value), case=False, regex=False)
+        elif op == "in":
+            if not isinstance(value, list) or not 1 <= len(value) <= 50 or not all(
+                type(item) in (str, int, float) for item in value
+            ):
+                raise ValueError("in requires a list of 1–50 strings or numbers")
+            strings = [item.strip().casefold() for item in value if isinstance(item, str)]
+            numbers = [item for item in value if type(item) in (int, float)]
+            mask = series.str.strip().str.casefold().isin(strings)
+            if numbers:
+                mask |= number(series).isin(numbers)
         elif op in {"eq", "ne"}:
             mask = (number(series) == value) if type(value) in (int, float) else series.str.strip().str.casefold() == str(value).strip().casefold()
             if op == "ne": mask = ~mask

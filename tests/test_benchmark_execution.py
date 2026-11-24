@@ -139,6 +139,40 @@ def test_duplicate_inspection_then_query_yields_to_panel(prepared, tmp_path):
     assert order.index("tool_request_blocked") < order.index("evidence_ready") < order.index("contribution")
 
 
+def test_query_reuses_corrected_header_and_accepts_year_membership(prepared, tmp_path):
+    # Title rows and model requests mirror the live failure on the official CSV.
+    (prepared.root / "data/input.csv").write_text(
+        "Title,,\n,,\nReports,,\nYear,Contributor,Reports\n"
+        "2022,Web,2\n2023,Web,4\n2024,Mobile,100\n2021,Web,100\n"
+    )
+    query = {"kind": "tool", "name": "query", "arguments": {
+        "file": "input.csv",
+        "filters": [{"column": "Year", "op": "in", "value": ["2022", "2023", "2024"]},
+                    {"column": "Contributor", "op": "eq", "value": "Web"}],
+        "aggregate": {"column": "Reports", "op": "sum"},
+    }}
+    opening = iter([
+        {"kind": "tool", "name": "inspect", "arguments": {"file": "input.csv", "header": 0}},
+        query,
+        {"kind": "tool", "name": "inspect", "arguments": {"file": "input.csv", "header": 3}},
+        query,
+    ])
+
+    class HeaderBackend(ScriptedBackend):
+        def complete(self, request, model):
+            if request.json_schema.get("title") == "ToolAction":
+                return LLMResponse(text=json.dumps(next(opening)), model=model, backend=self.name)
+            return super().complete(request, model)
+
+    events = []
+    store, _ = run_batch(prepared, broker(HeaderBackend()), SETTINGS, tmp_path / "results",
+                         limit=1, readiness=READINESS, observer=events.append)
+    requests = [e for e in events if e["kind"] == "tool_requested" and e["name"] == "query"]
+    assert [e["arguments"]["header"] for e in requests] == [0, 3]
+    assert requests[-1]["header_inherited"] is True
+    assert store.attempts()[0]["grade"]["correct"]
+
+
 @pytest.mark.parametrize("action,status", [
     (decision("contribution", "REVISE", 123456), "invalid_output"),
     ({"kind": "tool", "name": "list_files", "arguments": {}}, "insufficient_evidence"),

@@ -108,7 +108,10 @@ class BenchmarkAgent(PEXAgent):
         if isinstance(decision, ToolAction):
             if self._phase not in {"collect", "review"}:
                 raise DecisionParseError("Tools are closed for this turn. Return a final submission or a PXP contribution.")
-            if len(json.dumps([decision.name, decision.arguments], sort_keys=True)) > 8000:
+            args = decision.arguments
+            if decision.name == "query" and "header" not in args:
+                args = {**args, "header": 20}  # reserve space for the largest inherited header
+            if len(json.dumps([decision.name, args], sort_keys=True)) > 8000:
                 raise DecisionParseError("tool arguments exceed 8000 characters")
             return decision, []
         if self._phase == "collect":
