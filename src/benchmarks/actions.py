@@ -245,7 +245,7 @@ class BenchmarkAgent(PEXAgent):
         else:
             answer_schema = {"type": "array", "items": {"anyOf": [{"type": "number"}, {"type": "string"}]}}
         revision["properties"]["output"] = answer_schema
-        if self._review_root_id:
+        if self._review_root_id and self._phase in {"review", "review_closed"}:
             target = {"const": self._review_root_id, "type": "string"}
             schema["$defs"]["RootRatification"]["properties"]["target_contribution_id"] = target
             schema["$defs"]["Challenge"]["properties"]["target_contribution_id"] = target.copy()

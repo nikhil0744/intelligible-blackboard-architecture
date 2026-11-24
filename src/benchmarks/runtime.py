@@ -250,7 +250,8 @@ class SessionRunner:
                     observations.append(observation)
                     data = result.get("data")
                     if scope_issues:
-                        event("query_scope_mismatch", agent_id=agent.agent_id, request_id=request_id, issues=scope_issues)
+                        event("query_scope_mismatch", agent_id=agent.agent_id, request_id=request_id,
+                              issues=scope_issues, blocking=strict_scope)
                     if (action.name == "query" and result.get("ok") and isinstance(data, dict)
                             and (not strict_scope or not scope_issues)
                             and data.get("matched_rows", 0) > 0
