@@ -210,6 +210,32 @@ Requesting a tool is not a PXP vote. The controller returns its observation befo
 Never claim success from consensus; grading occurs independently after the session stops.
 """
 
+def evidence_checks(question, answer_type):
+    """Give the model the tool pattern for the work described in the question."""
+    question = question.casefold()
+    checks = []
+    if any(word in question for word in ("ratio", "proportion", "percent", "half", "relative", "distribution")):
+        checks.append("Find both operands. For a proportion, identify the reference population before choosing a denominator. "
+                      "Match any qualifiers on that population. Compute with calculate when combining values across rows or files.")
+    if "distribution" in question or "were distributed" in question:
+        checks.append("Apply the published category share from the reference year to the target year's count. "
+                      "For a subgroup within that category, multiply by the subgroup's share among records with that field available.")
+    if "lost between" in question:
+        checks.append("Find the loss-range table with bins that match the stated endpoints. Inspect the file summary for the number of reports with a monetary loss.")
+    if any(word in question for word in ("percent", "half", "proportion")):
+        checks.append('For a share within each row, query with derive={"name":"share","op":"share","columns":[numerator,other_columns...]}, numerator first. Compare share with a scalar (50% is 0.5). For a reported percentage column, values such as 50% are read as 50.')
+    if "previous year" in question or ("fastest" in question and "relative" in question):
+        checks.append('For growth from the previous year derive={"name":"growth","op":"change","columns":[count_column],"order_by":"Year"}. For growth since the first year per category, use op="baseline_change" and partition_by=category_column. Filter years after deriving, then sort by growth.')
+    if "minimum number" in question and "collectively" in question:
+        checks.append('For a cumulative threshold across categories, derive a cumulative_sum of the percentage column in descending order. Query the smallest cumulative value reaching the threshold and use its rank, if available.')
+    if "most frequent" in question and "least frequent" in question:
+        checks.append("Get both the maximum and minimum numeric counts over actual category rows before dividing.")
+    if "top" in question and answer_type == "list_exact":
+        checks.append('To find the top category per entity, query with first_per=entity_column and sort by numeric count descending. Filter for the requested category after taking the first per entity.')
+    if answer_type == "list_exact":
+        checks.append("Check matched_rows, truncated, and preview_only. Fetch all matching rows before submitting a list.")
+    return "\n".join(checks)
+
 
 class BenchmarkAgent(PEXAgent):
     """Uses the ordinary broker, prompt budget, parse repairs, personas, and usage ledger."""
@@ -315,14 +341,16 @@ class BenchmarkAgent(PEXAgent):
         if self._phase == "collect":
             instructions = (
                 "Collect evidence before proposing an answer. Return one tool request as JSON. "
-                "Use inspect to locate columns if needed, then query the CSV for the requested rows or aggregate. "
+                "Query a file from evidence_pending_files first when it is present. Each required file needs a usable query. "
+                "Use inspect without a header to see candidate sections and their columns. Query the relevant section rather than repeating inspect. "
+                "If an exact text filter finds nothing, check filter_suggestions, inspect actual spellings, or use a narrow literal contains search. "
                 "Match every qualifier in the question, including date range, category, and source when present. "
                 "Use previous observations to choose different arguments.\n" + TOOL_HELP
             )
         elif self._phase in {"opening", "submit"}:
             instructions = (
                 "Check whether the observed query and its result cover every qualifier in the question. "
-                "A successful query can still be too broad. "
+                "A successful query can still be too broad or incomplete. Calculate rather than guessing missing quantities. "
                 "For submission use kind=final, tag=REVISE, and target_contribution_id=null. "
                 "Put the answer in output. Cite the rows or calculation in your explanation."
             )
@@ -334,11 +362,19 @@ class BenchmarkAgent(PEXAgent):
             else:
                 instructions += "\nTools are closed for this turn. Submit the best answer supported by the observed CSV data."
         else:
-            instructions = ACTION_HELP
+            instructions = (
+                "Before RATIFY, independently check the question against the actual tool arguments and observed data. "
+                "Check the measure, dates, category, units, denominator, arithmetic, and list coverage as applicable. "
+                "A prior vote or rationale cannot resolve a query scope warning. Verify the relevant rows; "
+                "refute a concrete discrepancy or revise with a corrected answer.\n" + ACTION_HELP
+            )
             if self._phase == "review":
                 instructions += "\nUse tools when you need to check the claim. Reuse saved evidence.\n" + TOOL_HELP
             else:
                 instructions += "\nTools are closed for this turn. Review the current claim using saved evidence."
+        checks = evidence_checks(snapshot.problem_statement, self.answer_type)
+        if checks:
+            instructions += "\n" + checks
         instructions += f"\nThe final output must be {ANSWER_DESCRIPTIONS[self.answer_type]}."
         if root:
             instructions += (

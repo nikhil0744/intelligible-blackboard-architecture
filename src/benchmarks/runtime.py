@@ -133,6 +133,15 @@ class SessionRunner:
         recovery_context = None
         recovery_mode = "bounded_evidence_backtrack" if self.limits.recovery_enabled else "disabled"
 
+        def pending_files():
+            return [file for file in task.files if file not in evidence_by_file]
+
+        def investigation_hint():
+            pending = pending_files()
+            if pending:
+                return f"Next, query a missing source: {', '.join(pending)}. Inspect that source first if its columns are unknown."
+            return "Use the observed rows. Change the operation, columns, filter, or section if a necessary fact is missing."
+
         def event(kind, **payload):
             payload.setdefault("branch", branch)
             attempt.event(kind, **payload)
@@ -152,9 +161,7 @@ class SessionRunner:
                     vote_state = scheduler.vote_state(snapshot)
                     snapshot.initial_context = {**snapshot.initial_context, "votes": vote_state}
                     if multi_file:
-                        snapshot.initial_context["evidence_pending_files"] = [
-                            file for file in task.files if file not in evidence_by_file
-                        ]
+                        snapshot.initial_context["evidence_pending_files"] = pending_files()
                     if tool_rounds >= self.limits.max_tool_rounds:
                         stop_reason = "session_tool_budget"
                     elif branch == "recovery" and tool_rounds - recovery_tool_start >= self.limits.max_recovery_tool_rounds:
@@ -179,7 +186,10 @@ class SessionRunner:
                         return action
                     args = action.arguments.copy()
                     file = args.get("file")
-                    inherited_header = (action.name == "query" and "header" not in args
+                    automatic_header = args.get("header") is None or isinstance(args.get("header"), bool)
+                    if action.name in {"inspect", "query"} and automatic_header:
+                        args.pop("header", None)
+                    inherited_header = (action.name == "query" and automatic_header
                                         and isinstance(file, str) and file in inspected_headers)
                     if inherited_header:
                         args["header"] = inspected_headers[file]
@@ -192,7 +202,8 @@ class SessionRunner:
                             return agent.action(snapshot, "Use the new evidence and submit your answer.", phase="submit")
                         if reminder:
                             raise InsufficientEvidence("Recovery repeatedly requested the same prior-branch query")
-                        reminder = "That query already ran in the prior branch. Choose a different scope, measure, or raw row query."
+                        reminder = ("That query already ran in the prior branch. Choose a different scope, measure, or raw row query. "
+                                    + investigation_hint())
                         continue
                     if request in requests:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
@@ -206,7 +217,7 @@ class SessionRunner:
                         # A failed investigation needs an alternative tool request, not an invented claim.
                         if reminder:
                             raise InsufficientEvidence("Repeated tool requests produced no usable CSV query")
-                        reminder = "Your last request was a duplicate. Use the observation and change your tool or arguments."
+                        reminder = "Your last request was a duplicate. " + investigation_hint()
                         continue
                     requests.add(request)
                     reminder = None
@@ -223,7 +234,9 @@ class SessionRunner:
                     data = result.get("data")
                     scope_issues = data.get("scope_issues", []) if isinstance(data, dict) else []
                     if action.name == "inspect" and isinstance(file, str) and isinstance(data, dict) and "header" in data:
-                        inspected_headers[file] = data["header"]
+                        selected = data["header"]
+                        suggested = data.get("suggested_header")
+                        inspected_headers[file] = suggested if suggested is not None and selected < suggested else selected
                     # Keep recent observations inside the ordinary prompt budget. Complete
                     # observations stay in the durable event log, never silently in a cache.
                     observation = {"request_id": request_id, "agent_id": agent.agent_id,
@@ -237,9 +250,20 @@ class SessionRunner:
                                 "ok": result["ok"], "header": data.get("header"), "columns": data.get("columns", [])[:24],
                                 "suggested_header": data.get("suggested_header"),
                                 "header_candidates": data.get("header_candidates", [])[:8],
-                                "raw_first_lines": [line[:140] for line in data.get("raw_first_lines", [])[:6]],
+                                "sections": data.get("sections", [])[:6],
+                                "schema_note": data.get("schema_note"),
+                                "raw_first_lines": [line[:140] for line in data.get("raw_first_lines", [])[:4]],
                                 "truncated": True,
                             }
+                        elif action.name == "query" and isinstance(data, dict) and "rows" in data:
+                            rows = data["rows"]
+                            shown = rows.copy()
+                            while shown and len(json.dumps(shown, ensure_ascii=False)) > 1900:
+                                shown.pop()
+                            page = {"next_offset": args.get("offset", 0) + len(shown)} if len(shown) < len(rows) else {}
+                            observation["result"] = {"ok": True, "data": {
+                                **data, "rows": shown, "preview_only": len(shown) < len(rows), **page,
+                            }, "hint": "If the preview is incomplete, select fewer columns or query the next page."}
                         else:
                             observation["result"] = {"excerpt": json.dumps(result, ensure_ascii=False)[:1200],
                                                      "truncated": True, "hint": "Narrow query/select/limit to inspect the needed data."}
@@ -379,21 +403,27 @@ class SessionRunner:
                             recovery_context["prior_query"] = latest_query
                         if multi_file:
                             recovery_context["instruction"] += (
-                                " Recheck each file. At least one supporting query must differ from the prior branch."
+                                " Fill the missing sources first. At least one supporting query must differ from the prior branch."
                             )
                         recovery_context["recent_prior_observations"] = observations[-2:]
                         observations = []
                         latest_query = None
                         novel_query = None
-                        evidence_by_file = {}
+                        # A branch following failed collection can reuse trustworthy tool observations.
+                        # After a disputed claim, collect fresh evidence so its basis is rechecked.
+                        if source_root is not None:
+                            evidence_by_file = {}
                         branch = "recovery"
                         recovery_tool_start = tool_rounds
                         recovery.update(attempts=1, reason=status)
                         event("recovery_started", reason=status, parent_branch="main", checkpoint="before_opening_claim",
                               source_contribution_id=source_root.contribution_id if source_root else None,
                               source_claim=recovery_context["source_claim"])
-                        board, scheduler = new_board({"permitted_files": list(task.files), "answer_type": task.answer_type,
-                                                      "recovery": recovery_context})
+                        initial = {"permitted_files": list(task.files), "answer_type": task.answer_type,
+                                   "recovery": recovery_context}
+                        if multi_file:
+                            initial["query_evidence_by_file"] = evidence_by_file.copy()
+                        board, scheduler = new_board(initial)
                         with usage_scope(phase="candidate_replay"):
                             recovered_status, recovered_error = run_branch(recovery_turns)
                         candidate = active_root(board.get_snapshot(sid))

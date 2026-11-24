@@ -139,7 +139,8 @@ def test_duplicate_inspection_then_query_yields_to_panel(prepared, tmp_path):
     assert order.index("tool_request_blocked") < order.index("evidence_ready") < order.index("contribution")
 
 
-def test_query_reuses_corrected_header_and_accepts_year_membership(prepared, tmp_path):
+@pytest.mark.parametrize("inspect_header", [0, True, False, None])
+def test_query_inherits_suggested_header_and_accepts_year_membership(prepared, tmp_path, inspect_header):
     # Title rows and model requests mirror the live failure on the official CSV.
     (prepared.root / "data/input.csv").write_text(
         "Title,,\n,,\nReports,,\nYear,Contributor,Reports\n"
@@ -152,9 +153,7 @@ def test_query_reuses_corrected_header_and_accepts_year_membership(prepared, tmp
         "aggregate": {"column": "Reports", "op": "sum"},
     }}
     opening = iter([
-        {"kind": "tool", "name": "inspect", "arguments": {"file": "input.csv", "header": 0}},
-        query,
-        {"kind": "tool", "name": "inspect", "arguments": {"file": "input.csv", "header": 3}},
+        {"kind": "tool", "name": "inspect", "arguments": {"file": "input.csv", "header": inspect_header}},
         query,
     ])
 
@@ -168,7 +167,7 @@ def test_query_reuses_corrected_header_and_accepts_year_membership(prepared, tmp
     store, _ = run_batch(prepared, broker(HeaderBackend()), SETTINGS, tmp_path / "results",
                          limit=1, readiness=READINESS, observer=events.append)
     requests = [e for e in events if e["kind"] == "tool_requested" and e["name"] == "query"]
-    assert [e["arguments"]["header"] for e in requests] == [0, 3]
+    assert [e["arguments"]["header"] for e in requests] == [3]
     assert requests[-1]["header_inherited"] is True
     assert store.attempts()[0]["grade"]["correct"]
 
