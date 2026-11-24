@@ -28,9 +28,12 @@ class Limits:
     tool_timeout_s: float = 15
     run_timeout_s: float = 3600
     max_tools_per_turn: int = 8
+    recovery_enabled: bool = True
+    max_recovery_turns: int = 6
+    max_recovery_tool_rounds: int = 8
 
     def __post_init__(self):
-        if min(asdict(self).values()) <= 0:
+        if any(value <= 0 for value in asdict(self).values() if not isinstance(value, bool)):
             raise ValueError("all execution limits must be positive")
 
 
@@ -41,24 +44,57 @@ class InsufficientEvidence(RuntimeError):
     pass
 
 
+def _query_signature(args):
+    """Recognize equivalent query requests when choosing a recovery alternative."""
+    def value_key(value):
+        if isinstance(value, str):
+            return value.strip().casefold()
+        if isinstance(value, list):
+            return sorted(json.dumps(value_key(v), sort_keys=True) for v in value)
+        return value
+
+    try:
+        encoded_filters = sorted(json.dumps({key: value_key(value) for key, value in entry.items()},
+                                            sort_keys=True) for entry in args.get("filters", []))
+        aggregate = args.get("aggregate") or {}
+        return json.dumps([args.get("file"), args.get("header"), encoded_filters,
+                           {key: value_key(value) for key, value in aggregate.items()},
+                           [value_key(col) for col in args.get("group_by", [])],
+                           [value_key(col) for col in args.get("select", [])] if not aggregate else []],
+                          sort_keys=True)
+    except (AttributeError, TypeError):
+        # The tool executor will return validation diagnostics for malformed arguments.
+        return json.dumps(args, sort_keys=True)
+
+
 class BenchmarkScheduler(DeterministicScheduler):
     """Canonical scheduler with explicit three-person votes on the current revision."""
 
-    def _check_consensus(self, snapshot):
+    def vote_state(self, snapshot):
         root = active_root(snapshot)
-        if root is None:
-            return False
         votes = set()
         final = False
-        for c in snapshot.contributions[root.turn_index:]:
-            if c.tag in {PXPTag.REFUTE, PXPTag.REJECT}:
-                votes.clear()
-            if root_id(snapshot, c.contribution_id) == root.contribution_id:
+        if root:
+            claim = benchmark_claim_key(root.payload.prediction.claim)
+            for c in snapshot.contributions[root.turn_index:]:
+                if root_id(snapshot, c.contribution_id) != root.contribution_id:
+                    continue
+                if c.tag in {PXPTag.REFUTE, PXPTag.REJECT}:
+                    votes.clear()
                 if c.metadata.get("final_submission"):
                     final = True
-                if c.tag == PXPTag.RATIFY and benchmark_claim_key(c.payload.prediction.claim) == benchmark_claim_key(root.payload.prediction.claim):
+                if c.tag == PXPTag.RATIFY and benchmark_claim_key(c.payload.prediction.claim) == claim:
                     votes.add(c.agent_id)
-        return final and set(self.registered_agents) <= votes
+        return {
+            "claim_id": root.contribution_id if root else None,
+            "final_submission": final,
+            "ratified_agent_ids": [aid for aid in self.registered_agents if aid in votes],
+            "pending_agent_ids": [aid for aid in self.registered_agents if aid not in votes],
+        }
+
+    def _check_consensus(self, snapshot):
+        state = self.vote_state(snapshot)
+        return state["final_submission"] and not state["pending_agent_ids"]
 
 
 class SessionRunner:
@@ -72,9 +108,6 @@ class SessionRunner:
         started = time.monotonic()
         sid = attempt.identity["session_id"]
         aid = attempt.identity["attempt_id"]
-        board = InMemoryBoard()
-        board.create_session(task.task_id, task.question, {"permitted_files": list(task.files)}, sid)
-        scheduler = BenchmarkScheduler(sid, board, policy=RoundRobinPolicy(), deadlock_window=2, consensus_threshold=3)
         budget = CallBudget(max_attempts=self.limits.max_calls, timeout_s=self.limits.task_timeout_s)
         tools = DataTools(input_dir, task.files, timeout_s=self.limits.tool_timeout_s, question=task.question)
         observations = []
@@ -82,8 +115,14 @@ class SessionRunner:
         latest_query = None
         distinct_queries = set()
         inspected_headers: dict[str, int] = {}
+        branch = "main"
+        prior_queries = set()
+        recovery_tool_start = 0
+        recovery_context = None
+        recovery_mode = "bounded_evidence_backtrack" if self.limits.recovery_enabled else "disabled"
 
         def event(kind, **payload):
+            payload.setdefault("branch", branch)
             attempt.event(kind, **payload)
             self.observer({"kind": kind, "task_id": task.task_id, **payload})
 
@@ -95,8 +134,12 @@ class SessionRunner:
                 while True:
                     budget.check()
                     snapshot = board.get_snapshot(sid)
+                    vote_state = scheduler.vote_state(snapshot)
+                    snapshot.initial_context = {**snapshot.initial_context, "votes": vote_state}
                     if tool_rounds >= self.limits.max_tool_rounds:
                         stop_reason = "session_tool_budget"
+                    elif branch == "recovery" and tool_rounds - recovery_tool_start >= self.limits.max_recovery_tool_rounds:
+                        stop_reason = "recovery_tool_budget"
                     elif len(requests) >= self.limits.max_tools_per_turn:
                         stop_reason = "turn_tool_budget"
                     else:
@@ -122,6 +165,16 @@ class SessionRunner:
                     if inherited_header:
                         args["header"] = inspected_headers[file]
                     request = (action.name, json.dumps(args, sort_keys=True))
+                    query = _query_signature(args) if action.name == "query" else None
+                    if branch == "recovery" and opening and query in prior_queries:
+                        event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
+                              arguments=args, reason="prior_branch_query")
+                        if latest_query is not None:
+                            return agent.action(snapshot, "Use the new evidence and submit your numeric claim.", phase="submit")
+                        if reminder:
+                            raise InsufficientEvidence("Recovery repeatedly requested the same prior-branch query")
+                        reminder = "That query already ran in the prior branch. Choose a different scope, measure, or raw row query."
+                        continue
                     if request in requests:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
                               arguments=args, reason="duplicate_in_turn")
@@ -142,10 +195,12 @@ class SessionRunner:
                     tool_rounds += 1
                     event("tool_requested", request_id=request_id, agent_id=agent.agent_id,
                           name=action.name, arguments=args, header_inherited=inherited_header, board_version=snapshot.version,
-                          turn_index=len(snapshot.contributions), branch="main")
+                          turn_index=len(snapshot.contributions))
                     tools.timeout_s = min(self.limits.tool_timeout_s, budget.remaining())
                     result = tools.execute(request_id, action.name, args)
                     event("tool_observed", request_id=request_id, agent_id=agent.agent_id, result=result)
+                    if branch == "main" and query is not None:
+                        prior_queries.add(query)
                     data = result.get("data")
                     scope_issues = data.get("scope_issues", []) if isinstance(data, dict) else []
                     if action.name == "inspect" and isinstance(file, str) and isinstance(data, dict) and "header" in data:
@@ -185,6 +240,8 @@ class SessionRunner:
                         distinct_queries.add(request)
                     recent = observations[-3:]
                     context = {"permitted_files": list(task.files), "latest_tool_observations": recent}
+                    if recovery_context is not None:
+                        context["recovery"] = recovery_context
                     if latest_query is not None and latest_query not in recent:
                         context["latest_successful_query"] = latest_query
                     while len(json.dumps(context, ensure_ascii=False)) > 5500 and len(recent) > 1:
@@ -195,8 +252,16 @@ class SessionRunner:
         panel = [BenchmarkAgent(name, persona, self.broker, model=self.settings.model,
                                 seed=self.seed, counterfactual_capable=False, **self.settings.agent_kwargs())
                  for name, persona in ROSTER]
-        for agent in panel:
-            scheduler.register_agent(agent.agent_id, agent.role, handler(agent))
+
+        def new_board(context):
+            store = InMemoryBoard()
+            store.create_session(task.task_id, task.question, context, sid)
+            engine = BenchmarkScheduler(sid, store, policy=RoundRobinPolicy(), deadlock_window=2, consensus_threshold=3)
+            for agent in panel:
+                engine.register_agent(agent.agent_id, agent.role, handler(agent))
+            return store, engine
+
+        board, scheduler = new_board({"permitted_files": list(task.files)})
         old_hook = self.broker.response_hook
 
         def response_hook(request, response):
@@ -206,50 +271,106 @@ class SessionRunner:
             if old_hook:
                 old_hook(request, response)
 
-        error = None
-        status = "turn_limit"
-        turn_signatures = []
-        self.broker.response_hook = response_hook
-        self.broker.ledger.attach_file(attempt.path / "calls.jsonl")
-        try:
-            event("session_started", task=task.model_dump(mode="json"), recovery_mode="disabled",
-                  capable_agents=[], roster=[agent.spec() for agent in panel])
-            with usage_scope(trial_id=aid, session_id=sid, phase="deliberation"), budget_scope(budget):
-                for _ in range(self.limits.max_turns):
+        total_turns = 0
+        recovery = {"mode": recovery_mode, "attempts": 0, "calls": 0, "applied": False, "confirmed": False}
+
+        def run_branch(turn_limit):
+            nonlocal total_turns
+            turn_signatures = []
+            try:
+                for _ in range(turn_limit):
                     budget.check()
                     contribution = scheduler.step()
                     if contribution is None:
-                        status = "queue_empty"
-                        break
-                    event("contribution", contribution=contribution.model_dump(mode="json"))
+                        return "queue_empty", None
+                    total_turns += 1
                     snapshot = board.get_snapshot(sid)
+                    event("contribution", contribution=contribution.model_dump(mode="json"),
+                          votes=scheduler.vote_state(snapshot))
+                    if branch == "recovery" and contribution.tag == PXPTag.REVISE and contribution.metadata.get("final_submission"):
+                        event("recovery_candidate", contribution_id=contribution.contribution_id,
+                              claim=contribution.payload.prediction.claim,
+                              evidence_request_id=latest_query["request_id"],
+                              source_claim=recovery_context["source_claim"])
                     if snapshot.status == BlackboardStatus.CONSENSUS:
-                        status = "consensus"
-                        break
+                        return "consensus", None
                     if snapshot.status == BlackboardStatus.DEADLOCK:
-                        status = "deadlock"
-                        event("deadlock_detected", recovery_mode="disabled")
-                        break
+                        event("deadlock_detected", recovery_mode=recovery_mode)
+                        return "deadlock", None
                     turn_signatures.append((contribution.agent_id, contribution.tag,
                                             benchmark_claim_key(contribution.payload.prediction.claim), len(distinct_queries)))
                     cycle = len(panel)
                     if (len(turn_signatures) >= 2 * cycle
                             and turn_signatures[-2 * cycle:-cycle] == turn_signatures[-cycle:]
                             and any(item[1] in {PXPTag.REFUTE, PXPTag.REJECT} for item in turn_signatures[-cycle:])):
-                        status = "stalled"
                         event("discussion_stalled", reason="Repeated disagreement without new CSV queries")
-                        break
-        except AgentTurnError as exc:
-            error = exc.to_record()
-            # PEXAgent wraps a budget denial from the broker in AgentTurnError.
-            reason = getattr(exc.__cause__, "reason", None)
-            status = reason or exc.kind
-        except BudgetExceeded as exc:
-            status, error = exc.reason, {"error": str(exc)}
-        except InsufficientEvidence as exc:
-            status, error = "insufficient_evidence", {"error": str(exc)}
-        except KeyboardInterrupt:
-            status, error = "interrupted", {"error": "Stopped by user; resume restarts this task as a new attempt."}
+                        return "stalled", None
+            except AgentTurnError as exc:
+                # PEXAgent wraps budget denials raised by the broker.
+                return getattr(exc.__cause__, "reason", None) or exc.kind, exc.to_record()
+            except BudgetExceeded as exc:
+                return exc.reason, {"error": str(exc)}
+            except InsufficientEvidence as exc:
+                return "insufficient_evidence", {"error": str(exc)}
+            except KeyboardInterrupt:
+                return "interrupted", {"error": "Stopped by user; resume restarts this task as a new attempt."}
+            return "turn_limit", None
+
+        error = None
+        self.broker.response_hook = response_hook
+        self.broker.ledger.attach_file(attempt.path / "calls.jsonl")
+        try:
+            event("session_started", task=task.model_dump(mode="json"), recovery_mode=recovery_mode,
+                  roster=[agent.spec() for agent in panel])
+            with budget_scope(budget), usage_scope(trial_id=aid, session_id=sid):
+                status, error = run_branch(self.limits.max_turns)
+                if self.limits.recovery_enabled and status in {"insufficient_evidence", "deadlock", "stalled"}:
+                    recovery_turns = min(self.limits.max_recovery_turns, self.limits.max_turns - total_turns)
+                    if (recovery_turns < len(panel) + 1 or tool_rounds >= self.limits.max_tool_rounds
+                            or budget.attempts >= self.limits.max_calls or budget.remaining() <= 0):
+                        event("recovery_skipped", reason="Insufficient shared budget for a new candidate and fresh votes")
+                    else:
+                        main_board, main_scheduler = board, scheduler
+                        original = main_board.get_snapshot(sid)
+                        source_root = active_root(original)
+                        recovery_context = {
+                            "reason": status,
+                            "source_claim": source_root.payload.prediction.claim[:200] if source_root else None,
+                            "challenges": [post.payload.explanation.rationale[:240]
+                                           for post in original.contributions if post.tag in {PXPTag.REFUTE, PXPTag.REJECT}][-3:],
+                            "instruction": "This branch has rewound before the opening claim. Check a different CSV query before submitting.",
+                        }
+                        if latest_query is not None:
+                            recovery_context["prior_query"] = latest_query
+                        recovery_context["recent_prior_observations"] = observations[-2:]
+                        observations = []
+                        latest_query = None
+                        branch = "recovery"
+                        recovery_tool_start = tool_rounds
+                        recovery.update(attempts=1, reason=status)
+                        event("recovery_started", reason=status, parent_branch="main", checkpoint="before_opening_claim",
+                              source_contribution_id=source_root.contribution_id if source_root else None,
+                              source_claim=recovery_context["source_claim"])
+                        board, scheduler = new_board({"permitted_files": list(task.files), "recovery": recovery_context})
+                        with usage_scope(phase="candidate_replay"):
+                            recovered_status, recovered_error = run_branch(recovery_turns)
+                        candidate = active_root(board.get_snapshot(sid))
+                        confirmed = recovered_status == "consensus"
+                        recovery.update(
+                            status=recovered_status, confirmed=confirmed, applied=confirmed,
+                            calls=self.broker.ledger.summary(trial_id=aid, phase="candidate_replay").calls,
+                            tool_rounds=tool_rounds - recovery_tool_start,
+                            candidate_id=candidate.contribution_id if candidate else None,
+                            error=recovered_error,
+                        )
+                        event("recovery_finished", status=recovered_status, applied=confirmed, confirmed=confirmed,
+                              candidate_id=recovery["candidate_id"], votes=scheduler.vote_state(board.get_snapshot(sid)))
+                        if confirmed or recovered_status == "interrupted":
+                            status, error = recovered_status, recovered_error
+                        if not confirmed:
+                            board = main_board
+                            scheduler = main_scheduler
+                            branch = "main"
         finally:
             self.broker.response_hook = old_hook
             self.broker.ledger.attach_file(None)
@@ -262,11 +383,11 @@ class SessionRunner:
             if submissions:
                 output = submissions[-1].metadata["final_output"]
         event("session_stopped", status=status, consensus=snapshot.status == BlackboardStatus.CONSENSUS,
-              turns=len(snapshot.contributions), tool_rounds=tool_rounds)
+              turns=total_turns, tool_rounds=tool_rounds, votes=scheduler.vote_state(snapshot))
         usage = self.broker.trial_usage(aid)
         return {"status": status, "error": error, "output": output,
                 "consensus": snapshot.status == BlackboardStatus.CONSENSUS,
-                "turns": len(snapshot.contributions), "tool_rounds": tool_rounds,
-                "recovery": {"mode": "disabled", "calls": 0, "applied": False, "confirmed": False},
+                "turns": total_turns, "tool_rounds": tool_rounds, "votes": scheduler.vote_state(snapshot),
+                "recovery": recovery,
                 "intelligibility": "unassessed", "elapsed_s": time.monotonic() - started,
                 "usage": {**usage.model_dump(), "total_tokens": usage.total_tokens}}

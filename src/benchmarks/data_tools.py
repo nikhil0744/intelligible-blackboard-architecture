@@ -98,7 +98,8 @@ def _operation(root: str, allowed: tuple[str, ...], name: str, args: dict, quest
             if aliases:
                 raise ValueError(f"Ambiguous column {name!r}; use its exact displayed name")
         raise ValueError(f"Unknown CSV column {name!r} at header={header}. Parsed columns: {list(df.columns)!r}. "
-                         "Use inspect to find the row with the required column names.")
+                         "Revise the query using the displayed columns. If the file itself establishes a qualifier, "
+                         "keep the remaining row filters and omit that missing column. If the header is wrong, inspect a different row.")
 
     filters = args.get("filters", [])
     if not isinstance(filters, list) or len(filters) > 10: raise ValueError("invalid filters")

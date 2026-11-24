@@ -199,6 +199,8 @@ class RunStore:
                    "skipped": sum(r["status"] == "skipped" for r in outcomes),
                    "attempts": len(records), "partial_call_records": partial_calls,
                    "consensus": sum(bool(r.get("consensus")) for r in outcomes),
+                   "recovery_attempted_tasks": sum(bool(r.get("recovery", {}).get("attempts")) for r in outcomes),
+                   "recovery_confirmed_tasks": sum(bool(r.get("recovery", {}).get("confirmed")) for r in outcomes),
                    "success_rate_all_selected": correct / len(selected) if selected else None,
                    "success_rate_scored": correct / len(scored) if scored else None,
                    "aggregate_policy": "latest explicit attempt per task; all attempts retained and included in usage",
@@ -211,11 +213,13 @@ class RunStore:
         # CSV is derived, never the authoritative record.
         temporary = self.root / ".results.csv.tmp"
         with temporary.open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.DictWriter(stream, fieldnames=["task_id", "attempt_id", "status", "consensus", "score", "correct", "elapsed_s", "total_tokens"])
+            writer = csv.DictWriter(stream, fieldnames=["task_id", "attempt_id", "status", "consensus", "score", "correct", "recovery_attempts", "recovery_confirmed", "elapsed_s", "total_tokens"])
             writer.writeheader()
             for r in outcomes:
                 writer.writerow({"task_id": r["task_id"], "attempt_id": r.get("attempt_id"), "status": r["status"],
                                  "consensus": r.get("consensus"), "score": r.get("grade", {}).get("score"),
+                                 "recovery_attempts": r.get("recovery", {}).get("attempts"),
+                                 "recovery_confirmed": r.get("recovery", {}).get("confirmed"),
                                  "correct": r.get("grade", {}).get("correct"), "elapsed_s": r.get("elapsed_s"),
                                  "total_tokens": r.get("usage", {}).get("total_tokens")})
             stream.flush()

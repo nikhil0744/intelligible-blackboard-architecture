@@ -69,7 +69,7 @@ def configuration(prepared, settings, limits, seed, report, cpu_smoke=False):
             "model_digest": report["model_digest"], "backend_version": report.get("backend_version"),
             "inference": settings.to_dict(), "limits": asdict(limits), "seed": seed,
             "roster": [dict(agent_id=a, persona=p, counterfactual_capable=False) for a, p in ROSTER],
-            "recovery_mode": "disabled", "cpu_smoke": cpu_smoke,
+            "recovery_mode": "bounded_evidence_backtrack" if limits.recovery_enabled else "disabled", "cpu_smoke": cpu_smoke,
             "code_sha256": source_identity()["source_sha256"], "packages": package_identity(),
             "grading": "pinned Success metric; selected numeric_exact tasks; no official aggregate"}
 
@@ -179,9 +179,9 @@ def execute_pending(store, prepared, broker, settings, limits, seed, observer, r
                 # Disk/Drive/ledger failures must not turn into a model error or launch
                 # another task. The partial attempt remains available for inspection.
                 raise PersistenceError(f"Storage or task-input I/O failed; batch stopped: {exc}") from exc
+            store.summarize()
             observer({"kind": "attempt_saved", "task_id": task.task_id, "attempt_id": committed["attempt_id"],
                       "status": committed["status"], "grade": committed.get("grade"), "run_dir": str(store.root)})
-            store.summarize()
             if result["status"] == "interrupted":
                 break
         summary = store.summarize()

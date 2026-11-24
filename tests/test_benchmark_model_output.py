@@ -10,7 +10,7 @@ from benchmarks.actions import BenchmarkAgent, ToolAction
 from llm_broker import ChatMessage, LLMError, LLMRequest, ModelBroker
 from llm_broker.backends.mock import MockBackend
 from llm_broker.backends.ollama import OllamaBackend
-from prompts import DecisionParseError
+from prompts import DecisionParseError, DecisionSemanticError
 
 
 def final(claim, output, *, tag="REVISE", target=None):
@@ -20,6 +20,45 @@ def final(claim, output, *, tag="REVISE", target=None):
         "explanation": {"rationale": "I checked the result against the tool observation."},
         "output": output,
     })
+
+
+def test_single_numeric_submission_and_explicit_root_vote():
+    submitted = {
+        "kind": "final", "tag": "REVISE", "output": 1240, "confidence": 0.8,
+        "explanation": {"rationale": "I checked the result against the tool observation."},
+    }
+    backend = MockBackend([json.dumps(submitted)])
+    board = InMemoryBoard()
+    initial = board.create_session("task", "How many reports in 2024?")
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, max_parse_retries=0)
+        root = agent.action(initial, phase="submit")
+        assert root.payload.prediction.claim == "1240"
+        assert root.metadata["final_output"] == 1240
+        assert "prediction" not in backend.calls[0].json_schema["properties"]
+        assert "output" in backend.calls[0].json_schema["required"]
+        assert backend.calls[0].json_schema["properties"]["output"]["type"] == "number"
+        snapshot = board.submit(root)
+        vote = {
+            "kind": "ratify", "target_contribution_id": root.contribution_id, "confidence": 0.9,
+            "explanation": {"rationale": "The selected rows support the claim."},
+        }
+        backend.responses.append(json.dumps(vote))
+        accepted = agent.action(snapshot, phase="review_closed")
+        assert accepted.tag.value == "RATIFY"
+        assert accepted.payload.prediction.claim == root.payload.prediction.claim
+        assert not accepted.metadata["final_submission"]
+        properties = backend.calls[1].json_schema["$defs"]["RootRatification"]["properties"]
+        assert properties["target_contribution_id"]["const"] == root.contribution_id
+        assert "prediction" not in properties
+
+        revised = agent.to_contribution(snapshot, agent.parse_output(json.dumps({**submitted, "output": 1241})))
+        snapshot = board.submit(revised)
+        with pytest.raises(DecisionSemanticError, match="exact current claim root"):
+            agent.validate_output(agent.parse_output(json.dumps(vote)), snapshot)
+        with pytest.raises(DecisionSemanticError, match="but your claim"):
+            legacy = final("1240", 1240, tag="RATIFY", target=revised.contribution_id)
+            agent.validate_output(agent.parse_output(legacy), snapshot)
 
 
 def test_opening_allows_query_refinement_or_a_supported_submission():

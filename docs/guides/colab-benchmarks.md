@@ -14,7 +14,7 @@ Use [colab_benchmarks.ipynb](../../notebooks/colab_benchmarks.ipynb) to run actu
 | Agents | Data analyst, data engineer/critic, general reasoner |
 | Execution | Actual `PEXAgent` validation/inference, in-memory board, deterministic scheduler, controlled tools |
 | Grading | Pinned upstream `Success` definitions, numeric answers; no hosted judge/pipeline grading |
-| Recovery | Disabled; zero capable agents and zero recovery calls |
+| Recovery | Bounded evidence backtracking enabled by default; use the notebook switch or CLI option `--no-recovery` for baseline runs |
 | MedAgentBench | Unavailable pending its official environment/evaluator inside Colab |
 | Presentation | Saved trace table and recorded playback through the existing HTML viewer |
 
@@ -26,7 +26,7 @@ These are profile results, not the official aggregate. An incorrect answer remai
 2. Run bootstrap. It checks out the notebook's immutable project revision and installs dependencies.
 3. Mount Drive, select one task for the first run, and run preparation.
 4. Run the experiment. Claims, PXP tags, requests and observations print as records are saved.
-5. Review grades and a saved trace; optionally download the bundle.
+5. Review grades in cell 5. In cell 6, paste an attempt ID from the results table to play that attempt, or leave it blank for the latest committed attempt. Download the bundle to present the viewer offline.
 
 Setup downloads about 1.5 GB of compressed Ollama runtime and 4.7 GB of model weights. Model files stay on local runtime disk; Drive holds the small benchmark cache and results. A new runtime downloads the model again. Setup checks GPU, RAM and disk, then uses the official user-space Linux archive without systemd or Docker. This recipe still requires fresh-Colab validation.
 
@@ -67,9 +67,9 @@ Tools support listing, CSV inspection, filters, grouping, aggregation and bounde
 
 Full observations are saved; recent bounded observations return to prompts. Excerpts are marked, with a hint to narrow the query. Prompt truncation is recorded in contribution metadata.
 
-The opening agent requests tools until a CSV query returns matching data that passes the available scope checks. The checks compare recognizable question qualifiers with the selected rows and flag mismatches in the trace. The analyst can refine its query before submitting a numeric answer for panel review. The tool budget allows up to eight distinct calls per turn. The controller records the query's request ID at the handoff. A listing, inspection, failed query, or empty query cannot open discussion. If evidence collection exhausts its tools, the run records `insufficient_evidence`. Two repeated rounds of the same disagreement without new successful queries stop as `stalled`. Both statuses are distinct from deadlock recovery and answer correctness.
+The opening agent requests tools until a CSV query returns matching data that passes the available scope checks. The checks compare recognizable question qualifiers with the selected rows and flag mismatches in the trace. The analyst can refine its query before submitting a numeric answer for panel review. The tool budget allows up to eight distinct calls per turn. The controller records the query's request ID at the handoff. A listing, inspection, failed query, or empty query cannot open discussion. If evidence collection exhausts its tools, the run records `insufficient_evidence`. Two repeated rounds of the same disagreement without new successful queries stop as `stalled`. These conditions can trigger a bounded recovery investigation when recovery is enabled.
 
-A revision starts a fresh claim. All three agents, including its author, must explicitly ratify that claim after the latest revision, and a final submission is required. Disagreement clears prior votes. Incompatible claims cannot establish consensus. The baseline stops at consensus, unresolved disagreement, resource limits, error or interruption. Recovery comparisons stay unavailable until baseline Colab/resume acceptance and separate recovery verification.
+A revision starts a fresh claim. All three agents, including its author, must explicitly ratify that claim after the latest revision, and a final submission is required. Disagreement clears prior votes. Incompatible claims cannot establish consensus. On a deadlock, a repeated disagreement, or an investigation that exhausts its turn without usable evidence, the enabled controller may start one new branch before the opening claim. It carries forward bounded observations and challenges and requires a different in-scope CSV query. A candidate replaces the original submission only after fresh votes from all three agents. The branch shares the original call, time, turn and tool budgets. A malformed model response remains an output error. For a paired comparison create two new runs with the same task IDs, seed, model and budgets. Toggle only recovery. Record attempts, accepted answers, consensus and independent grades from both runs.
 
 The final numeric output is frozen before grading. The grader extracts only checksum-pinned `str_to_float`, `try_convert_to_number` and `Success` definitions, avoiding upstream imports that load hosted-model grading paths. Grading never feeds labels to agents and follows the pinned metric's numeric coercion/tolerances. Other official metrics are excluded.
 
@@ -119,7 +119,7 @@ Source, configuration and evaluator dispatch were inspected. That setup does not
 | Prior-main environment/evaluator wrappers | Inspected; simulations are not official Colab deployments |
 | Existing ingesters | Preserved for older formats; pinned adapter allowlists official query fields/private labels |
 | Existing mscore batch/exporter | Preserved as historical demo; unused by real benchmark execution/export |
-| Existing HTML viewer | Reused with an adapter over verified recorded events |
+| Recorded HTML viewer | Standalone timeline over verified recorded events; the legacy viewer remains available to existing callers |
 
 ## Acceptance evidence to collect
 

@@ -31,6 +31,7 @@ def main(argv=None):
     run.add_argument("--max-turns", type=int, default=15)
     run.add_argument("--task-timeout-s", type=float, default=1200)
     run.add_argument("--run-timeout-s", type=float, default=3600)
+    run.add_argument("--no-recovery", action="store_true", help="Disable recovery for a baseline comparison")
     run.add_argument("--cpu-smoke", action="store_true")
     run.add_argument("--temporary", action="store_true", help="Explicit ephemeral smoke mode; download results before disconnecting")
     resume = commands.add_parser("resume")
@@ -70,7 +71,7 @@ def main(argv=None):
                 else:
                     store, report = run_batch(prepared, broker, settings, args.results_dir,
                         limit=args.limit, task_ids=args.task_ids, seed=args.seed,
-                        limits=Limits(max_turns=args.max_turns, task_timeout_s=args.task_timeout_s,
+                        limits=Limits(recovery_enabled=not args.no_recovery, max_turns=args.max_turns, task_timeout_s=args.task_timeout_s,
                                       run_timeout_s=args.run_timeout_s),
                         cpu_smoke=args.cpu_smoke, temporary=args.temporary)
                 print(f"Saved run: {store.root}")

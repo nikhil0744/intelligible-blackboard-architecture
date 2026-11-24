@@ -32,7 +32,7 @@ include = ["contracts*", "blackboard*", "storage*", "counterfactual*", "sandbox*
 prompts = ["personas.json"]
 fixtures = ["sample_deadlocks.json"]
 contracts = ["stubs/*.schema.json"]
-benchmarks = ["resources.json"]
+benchmarks = ["resources.json", "benchmark_viewer.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

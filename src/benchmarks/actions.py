@@ -7,12 +7,13 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, WithJsonSchema, model_validator
 
 from agents.base import PEXAgent
 from contracts.schemas import PXPTag
 from prompts import AgentDecision, DecisionParseError, DecisionSemanticError
 from prompts.budget import build_prompt
+from prompts.schema import DecisionExplanation, DecisionPrediction
 from prompts.validation import normalize_claim, validate_decision
 
 from .data_tools import TOOL_HELP
@@ -38,7 +39,8 @@ def numeric_answer(value) -> tuple[str, Decimal]:
         number = Decimal(text)
     except InvalidOperation as exc:
         raise ValueError("invalid numeric answer") from exc
-    if not math.isfinite(float(number)):
+    converted = float(number)
+    if not math.isfinite(converted) or (number and converted == 0):
         raise ValueError("numeric answer is outside the supported range")
     return text, number
 
@@ -95,14 +97,61 @@ class DiscussionAction(AgentDecision):
 ACTION = TypeAdapter(Annotated[Union[ToolAction, DiscussionAction], Field(discriminator="kind")])
 
 
-class OpeningSubmission(DiscussionAction):
+class LegacyOpeningSubmission(DiscussionAction):
     kind: Literal["final"]
     tag: Literal[PXPTag.REVISE]
     target_contribution_id: None = None
     output: int | float | str
 
 
+class NumericRevision(BaseModel):
+    """Model-facing numeric action. The board claim is derived from this one submission."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["final"]
+    tag: Literal[PXPTag.REVISE]
+    target_contribution_id: str | None = None
+    output: Annotated[int | float | str, WithJsonSchema({"type": "number"})]
+    confidence: float = Field(ge=0, le=1)
+    explanation: DecisionExplanation
+
+    def to_discussion(self) -> DiscussionAction:
+        claim, _ = numeric_answer(self.output)
+        return DiscussionAction(
+            kind=self.kind, tag=self.tag, target_contribution_id=self.target_contribution_id,
+            output=self.output, explanation=self.explanation,
+            prediction=DecisionPrediction(claim=claim, confidence=self.confidence),
+        )
+
+
+class OpeningSubmission(NumericRevision):
+    target_contribution_id: None = None
+
+
+class RootRatification(BaseModel):
+    """An explicit vote for the current root and the reasoning attached to it."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["ratify"]
+    target_contribution_id: str
+    confidence: float = Field(ge=0, le=1)
+    explanation: DecisionExplanation
+
+
+class Challenge(DiscussionAction):
+    kind: Literal["contribution"]
+    tag: Literal[PXPTag.REFUTE, PXPTag.REJECT]
+    target_contribution_id: str
+    output: None = None
+
+
 OPENING_ACTION = TypeAdapter(Annotated[Union[ToolAction, OpeningSubmission], Field(discriminator="kind")])
+REVIEW_ACTION = TypeAdapter(Annotated[
+    Union[ToolAction, NumericRevision, RootRatification, Challenge], Field(discriminator="kind")
+])
+CLOSED_REVIEW_ACTION = TypeAdapter(Annotated[
+    Union[NumericRevision, RootRatification, Challenge], Field(discriminator="kind")
+])
 
 
 def active_root(snapshot):
@@ -122,12 +171,11 @@ def root_id(snapshot, contribution_id):
 
 
 ACTION_HELP = """Return one JSON object matching the provided schema.
-For PXP responses, set target_contribution_id to the current claim's ID for RATIFY, REFUTE, or REJECT.
-For final submissions, prediction.claim must be the same bare number as output; include units in the explanation.
-Once the observations support a numeric answer, submit it as "kind":"final" using REVISE or RATIFY.
-A REVISE creates a fresh claim and resets all votes. Use it to amend the answer or its reasoning.
-RATIFY the current root id and repeat its number when you agree with both its answer and reasoning;
-all THREE agents, including the author, must explicitly RATIFY after the latest revision to reach consensus.
+If the current claim and reasoning are supported, use kind=ratify and its exact target_contribution_id.
+If data support a correction to the answer or reasoning, use kind=final and tag=REVISE. Put the number in output.
+Put units in the explanation. A revision resets all votes.
+If you find a problem but cannot yet propose a correction, use kind=contribution and tag=REFUTE or REJECT.
+Explain the problem and target the current claim. All three agents, including its author, must vote after a revision.
 Requesting a tool is not a PXP vote. The controller returns its observation before your next action.
 Never claim success from consensus; grading occurs independently after the session stops.
 """
@@ -137,6 +185,7 @@ class BenchmarkAgent(PEXAgent):
     """Uses the ordinary broker, prompt budget, parse repairs, personas, and usage ledger."""
 
     _phase = "review"
+    _review_root_id = None
 
     def output_schema(self):
         if self._phase == "collect":
@@ -145,7 +194,13 @@ class BenchmarkAgent(PEXAgent):
             return OPENING_ACTION.json_schema()
         if self._phase == "submit":
             return OpeningSubmission.model_json_schema()
-        return ACTION.json_schema() if self._phase == "review" else DiscussionAction.model_json_schema()
+        action = REVIEW_ACTION if self._phase == "review" else CLOSED_REVIEW_ACTION
+        schema = action.json_schema()
+        if self._review_root_id:
+            target = {"const": self._review_root_id, "type": "string"}
+            schema["$defs"]["RootRatification"]["properties"]["target_contribution_id"] = target
+            schema["$defs"]["Challenge"]["properties"]["target_contribution_id"] = target.copy()
+        return schema
 
     def parse_output(self, text):
         try:
@@ -154,10 +209,15 @@ class BenchmarkAgent(PEXAgent):
             # bool is a numeric subclass in Python; never turn false into a numeric answer.
             if isinstance(raw, dict) and isinstance(raw.get("output"), bool):
                 raise ValueError("numeric final output cannot be a boolean")
-            if self._phase == "opening":
-                return OPENING_ACTION.validate_python(raw)
-            if self._phase == "submit":
-                return OpeningSubmission.model_validate(raw)
+            if isinstance(raw, dict) and raw.get("kind") == "ratify":
+                return RootRatification.model_validate(raw)
+            if isinstance(raw, dict) and raw.get("kind") == "final":
+                opening = self._phase in {"opening", "submit"}
+                if "prediction" not in raw:
+                    action = OpeningSubmission if opening else NumericRevision
+                    return action.model_validate(raw).to_discussion()
+                if opening:
+                    return LegacyOpeningSubmission.model_validate(raw)
             return ACTION.validate_python(raw)
         except (ValueError, ValidationError) as exc:
             raise DecisionParseError(str(exc)) from exc
@@ -174,8 +234,19 @@ class BenchmarkAgent(PEXAgent):
             return decision, []
         if self._phase == "collect":
             raise DecisionSemanticError("evidence_required", "Request a CSV tool. The board opens after a successful query with data.")
-        if self._phase in {"opening", "submit"} and (decision.kind != "final" or decision.tag != PXPTag.REVISE):
-            raise DecisionSemanticError("submission_required", "Submit the evidence-based numeric answer with kind=final and tag=REVISE.")
+        if self._phase in {"opening", "submit"} and (
+            not isinstance(decision, DiscussionAction) or decision.kind != "final" or decision.tag != PXPTag.REVISE
+        ):
+            raise DecisionSemanticError("submission_required", "Submit the evidence-based number with kind=final, tag=REVISE and output.")
+        if isinstance(decision, RootRatification):
+            root = active_root(snapshot)
+            if root is None or decision.target_contribution_id != root.contribution_id:
+                raise DecisionSemanticError("stale_vote", "Use kind=ratify with the exact current claim root ID.")
+            decision = DiscussionAction(
+                kind="contribution", tag=PXPTag.RATIFY, target_contribution_id=decision.target_contribution_id,
+                prediction=DecisionPrediction(claim=root.payload.prediction.claim, confidence=decision.confidence),
+                explanation=decision.explanation,
+            )
         validated, repairs = validate_decision(decision, snapshot, claim_key=benchmark_claim_key)
         if validated.tag == PXPTag.RATIFY:
             root = active_root(snapshot)
@@ -202,7 +273,7 @@ class BenchmarkAgent(PEXAgent):
                 "Check whether the observed query and its result cover every qualifier in the question. "
                 "A successful query can still be too broad. "
                 "For submission use kind=final, tag=REVISE, and target_contribution_id=null. "
-                "Use the same bare number for prediction.claim and output. Cite the rows or calculation in your explanation."
+                "Put the bare number in output. Cite the rows or calculation in your explanation."
             )
             if self._phase == "opening":
                 instructions += (
@@ -220,7 +291,7 @@ class BenchmarkAgent(PEXAgent):
         if root:
             instructions += (
                 f"\nCurrent claim root id={root.contribution_id}. "
-                f'For RATIFY, REFUTE, or REJECT on this claim, set "target_contribution_id":"{root.contribution_id}".'
+                f'For kind=ratify, REFUTE, or REJECT on this claim, set "target_contribution_id":"{root.contribution_id}".'
             )
             must_keep_ids = tuple(set(must_keep_ids) | {root.contribution_id})
         if extra_instructions:
@@ -234,12 +305,14 @@ class BenchmarkAgent(PEXAgent):
         )
 
     def action(self, snapshot, extra_instructions=None, *, phase="review"):
-        previous = self._phase
+        previous = self._phase, self._review_root_id
         self._phase = phase
+        root = active_root(snapshot)
+        self._review_root_id = root.contribution_id if root else None
         try:
             formulation = self.formulate(snapshot, extra_instructions)
         finally:
-            self._phase = previous
+            self._phase, self._review_root_id = previous
         decision = formulation.decision
         if isinstance(decision, ToolAction):
             return decision
