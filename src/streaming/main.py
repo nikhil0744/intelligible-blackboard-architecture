@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -234,6 +234,102 @@ async def websocket_session_telemetry(websocket: WebSocket, session_id: str) -> 
     except Exception as exc:
         logger.error("Session WebSocket (%s) unexpected error: %s", session_id, exc)
         await telemetry_manager.disconnect(websocket, session_id=session_id)
+
+
+# ---------------------------------------------------------------------------
+# Benchmark run state (in-memory; suitable for single-process deployments)
+# ---------------------------------------------------------------------------
+_benchmark_results: List[Dict[str, Any]] = []
+_benchmark_running: bool = False
+
+
+class BenchmarkRunRequest(BaseModel):
+    """Parameters for triggering an in-process mock ablation batch."""
+    trials: int = 8
+    densities: List[float] = [0.0, 0.33, 0.66, 1.0]
+    dataset: str = "mscore"
+
+
+@app.post("/api/benchmarks/run", tags=["Benchmarks"])
+async def trigger_benchmark_run(
+    request: BenchmarkRunRequest,
+    background_tasks: BackgroundTasks,
+) -> Dict[str, Any]:
+    """
+    Trigger a mock ablation benchmark batch in the background.
+    Uses the BatchTrialRunner simulation engine (no GPU required).
+    Results are stored in memory and retrievable via GET /api/benchmarks/results.
+    """
+    global _benchmark_running
+    if _benchmark_running:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A benchmark batch is already running. Poll /api/benchmarks/results for status.",
+        )
+    _benchmark_running = True
+
+    async def _run() -> None:
+        global _benchmark_results, _benchmark_running
+        try:
+            from benchmarks.mscore import BatchTrialRunner, MSCoReIngestor
+            items = MSCoReIngestor.get_sample_dataset()
+            runner = BatchTrialRunner(streaming_enabled=True)
+            # Restrict to `trials` items to keep latency reasonable
+            configs = runner.generate_ablation_matrix(
+                items[: max(1, request.trials // 4)],
+                densities=request.densities,
+            )
+            results: List[TrialResult] = await runner.run_batch(configs)
+            _benchmark_results = [r.model_dump(mode="json") for r in results]
+        except Exception as exc:
+            logger.error("Benchmark batch failed: %s", exc)
+        finally:
+            _benchmark_running = False
+
+    background_tasks.add_task(_run)
+    return {
+        "status": "started",
+        "message": f"Benchmark batch queued ({request.trials} trials, densities={request.densities}). "
+                   "Poll GET /api/benchmarks/results for live results.",
+    }
+
+
+@app.get("/api/benchmarks/results", tags=["Benchmarks"])
+async def get_benchmark_results() -> Dict[str, Any]:
+    """
+    Return the latest ablation benchmark results together with aggregated KPI summary.
+    Returns an empty list while a run is in-flight (poll until running=false).
+    """
+    summary: Dict[str, Any] = {}
+    if _benchmark_results:
+        from analytics.metrics import AblationAnalyzer, summarize_results
+        from contracts.schemas import TrialResult
+        try:
+            parsed = [TrialResult.model_validate(r) for r in _benchmark_results]
+            df = summarize_results(parsed)
+            analyzer = AblationAnalyzer(df)
+            density_summary = analyzer.get_density_summary()
+            resolution = analyzer.compute_deadlock_resolution_efficiency()
+            # Convert to plain dict for JSON serialisation
+            summary = {
+                "density_rows": density_summary.to_dict(orient="records"),
+                "resolution_efficiency": {str(k): v for k, v in resolution.items()},
+                "total_trials": len(_benchmark_results),
+                "peak_consensus_pct": float(density_summary["consensus_rate_pct"].max()),
+                "peak_ultra_strong_pct": float(density_summary["ultra_strong_pct"].max()),
+                "peak_deadlock_recovery_pct": float(
+                    density_summary["deadlock_rate_pct"].max()
+                ),
+            }
+        except Exception as exc:
+            logger.warning("Could not build summary: %s", exc)
+
+    return {
+        "running": _benchmark_running,
+        "result_count": len(_benchmark_results),
+        "results": _benchmark_results,
+        "summary": summary,
+    }
 
 
 if __name__ == "__main__":

@@ -15,10 +15,15 @@ from streaming.manager import ConnectionManager, telemetry_manager
 
 @pytest.fixture(autouse=True)
 def reset_telemetry_state():
-    """Reset telemetry manager state between tests."""
+    """Reset telemetry manager state and benchmark run state between tests."""
+    import streaming.main as sm
     telemetry_manager.clear()
+    sm._benchmark_running = False
+    sm._benchmark_results = []
     yield
     telemetry_manager.clear()
+    sm._benchmark_running = False
+    sm._benchmark_results = []
 
 
 @pytest.mark.asyncio
@@ -174,4 +179,52 @@ def test_rest_graph_endpoint():
     assert data["nodes"][0]["data"]["agent_id"] == "Dr. Pulmonologist"
     assert data["edges"][0]["source"] == "turn_1"
     assert data["edges"][0]["target"] == "turn_2"
+
+
+def test_benchmark_results_initial_state():
+    client = TestClient(app)
+    resp = client.get("/api/benchmarks/results")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["running"] is False
+    assert data["result_count"] == 0
+    assert data["results"] == []
+    assert data["summary"] == {}
+
+
+def test_benchmark_run_endpoint_starts_and_completes():
+    client = TestClient(app)
+    resp = client.post(
+        "/api/benchmarks/run",
+        json={"trials": 4, "densities": [0.0, 1.0], "dataset": "mscore"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "started"
+    assert "queued" in data["message"]
+
+    # Background task finishes under TestClient; check results endpoint
+    results_resp = client.get("/api/benchmarks/results")
+    assert results_resp.status_code == 200
+    res_data = results_resp.json()
+    assert res_data["running"] is False
+    assert res_data["result_count"] > 0
+    assert "density_rows" in res_data["summary"]
+    assert "peak_consensus_pct" in res_data["summary"]
+
+
+def test_benchmark_run_conflict_when_already_running():
+    import streaming.main as sm
+    sm._benchmark_running = True
+    try:
+        client = TestClient(app)
+        resp = client.post(
+            "/api/benchmarks/run",
+            json={"trials": 4, "densities": [0.0, 1.0], "dataset": "mscore"},
+        )
+        assert resp.status_code == 409
+        assert "already running" in resp.json()["detail"]
+    finally:
+        sm._benchmark_running = False
+
 

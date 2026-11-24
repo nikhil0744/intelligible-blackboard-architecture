@@ -219,11 +219,7 @@ export default function App() {
 
         {/* Tab 2: Ablation Benchmarks */}
         {activeTab === 'ablation' && (
-          <AblationDashboard
-            onTriggerBatchRun={async () => {
-              console.log('Batch run triggered');
-            }}
-          />
+          <AblationDashboard />
         )}
 
         {/* Tab 3: Raw Telemetry Stream Feed */}
