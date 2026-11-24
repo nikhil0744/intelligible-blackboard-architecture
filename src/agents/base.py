@@ -180,16 +180,19 @@ class PEXAgent:
         snapshot: BlackboardSnapshot,
         extra_instructions: Optional[str] = None,
         must_keep_ids: Sequence[str] = (),
+        *,
+        reserved_tokens: int = 0,
     ):
         """Build the prompt inside the token budget; returns (messages, PromptBudgetReport)."""
         extra = "\n".join(x for x in (self.system_addendum, extra_instructions) if x) or None
+        budget = self.prompt_token_budget
         return build_prompt(
             self.persona,
             snapshot,
             self.agent_id,
             extra,
             self.max_history,
-            token_budget=self.prompt_token_budget,
+            token_budget=None if budget is None else max(budget - reserved_tokens, 0),
             must_keep_ids=must_keep_ids,
         )
 
@@ -251,10 +254,18 @@ class PEXAgent:
                 code = e.code if isinstance(e, DecisionSemanticError) else "invalid_json"
                 reasons.append(f"{code}: {e}")
                 log.warning("%s: rejected output (attempt %d, %s): %s", self.agent_id, attempt, code, str(e)[:200])
-                messages = messages + [
-                    ChatMessage(role="assistant", content=resp.text[:2000]),
-                    repair_message(resp.text, str(e)),
-                ]
+                if attempt < max_attempts:
+                    repair = [
+                        ChatMessage(role="assistant", content=resp.text[:500]),
+                        repair_message(resp.text, str(e)),
+                    ]
+                    # Rebuild the board prompt with room for the latest correction.
+                    # Prior invalid answers stay in the trace, not the context window.
+                    reserved = sum(estimate_tokens(m.content) + 8 for m in repair)
+                    messages, budget = self.read_with_report(
+                        snapshot, extra_instructions, must_keep_ids, reserved_tokens=reserved
+                    )
+                    messages += repair
         raise AgentTurnError(
             f"{self.agent_id}: no valid decision after {max_attempts} attempts: {reasons[-1][:300]}",
             agent_id=self.agent_id,

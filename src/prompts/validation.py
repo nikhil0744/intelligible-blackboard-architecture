@@ -12,7 +12,7 @@ replayed turns accept exactly the same outputs.
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 from contracts.schemas import BlackboardSnapshot, PXPTag
 
@@ -47,7 +47,12 @@ def _ids_hint(snapshot: BlackboardSnapshot, limit: int = 12) -> str:
     return ", ".join(c.contribution_id for c in snapshot.contributions[-limit:])
 
 
-def validate_decision(decision: AgentDecision, snapshot: BlackboardSnapshot) -> Tuple[AgentDecision, List[str]]:
+def validate_decision(
+    decision: AgentDecision,
+    snapshot: BlackboardSnapshot,
+    *,
+    claim_key: Callable[[str], object] = normalize_claim,
+) -> Tuple[AgentDecision, List[str]]:
     """Return (decision, repair_reasons) or raise DecisionSemanticError.
 
     Only two meaning-preserving repairs are applied, and both are reported:
@@ -98,7 +103,7 @@ def validate_decision(decision: AgentDecision, snapshot: BlackboardSnapshot) -> 
     if d.tag == PXPTag.RATIFY:
         target = next(c for c in contribs if c.contribution_id == d.target_contribution_id)
         target_claim = target.payload.prediction.claim
-        if normalize_claim(d.prediction.claim) != normalize_claim(target_claim):
+        if claim_key(d.prediction.claim) != claim_key(target_claim):
             raise DecisionSemanticError(
                 "ratify_claim_mismatch",
                 f"You tagged RATIFY on {target.contribution_id}, but your claim '{d.prediction.claim}' "
@@ -106,5 +111,5 @@ def validate_decision(decision: AgentDecision, snapshot: BlackboardSnapshot) -> 
                 "RATIFY means you hold exactly the target's claim: repeat it word for word. "
                 "If your claim is different, use REVISE (your own claim) or REFUTE/REJECT instead.",
             )
-        d.prediction.claim = target_claim  # identical up to case/whitespace/punctuation
+        d.prediction.claim = target_claim  # identical under the caller's comparison
     return d, repairs

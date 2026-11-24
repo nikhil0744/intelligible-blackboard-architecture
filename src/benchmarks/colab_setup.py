@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import platform
-import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -90,11 +89,10 @@ def ensure_service(directory=Path("/content/blackboard-runtime"), *, cpu_smoke=F
     hardware = hardware_report()
     if not cpu_smoke and not hardware["gpus"]:
         raise ValueError("Select a GPU in Runtime > Change runtime type, reconnect, then run setup again")
-    if hardware["disk_free_mb"] < 18 * 1024:
-        raise ValueError("Setup needs 18 GiB of local free disk for the model and verified runtime download/extraction")
-    if hardware["memory"] and hardware["memory"]["available_mb"] < 6 * 1024:
-        raise ValueError("Less than 6 GiB of host RAM is available; restart a clean runtime before setup")
     spec = resources()["runtime"]
+    install_dir = directory / "ollama" / spec["ollama_version"]
+    if not install_dir.exists() and hardware["disk_free_mb"] < 18 * 1024:
+        raise ValueError("Initial setup needs 18 GiB of local free disk for download and extraction")
     binary = install_ollama(directory / "ollama", progress)
     host = "http://127.0.0.1:11434"
     backend = OllamaBackend(host=host)
@@ -136,6 +134,10 @@ def ensure_service(directory=Path("/content/blackboard-runtime"), *, cpu_smoke=F
             raise ValueError(f"Port 11434 is running Ollama {version}; the notebook requires {spec['ollama_version']}. Stop the other service before setup.")
         entries = {entry["name"]: entry for entry in backend.model_entries()}
         if spec["model"] not in entries:
+            if hardware["disk_free_mb"] * 1024**2 < spec["model_download_bytes"]:
+                raise ValueError("Insufficient local disk space for the pinned model download")
+            if hardware["memory"] and hardware["memory"]["available_mb"] < 6 * 1024:
+                raise ValueError("Less than 6 GiB of host RAM is available for initial model setup")
             progress(f"Pulling {spec['model']} (~{spec['model_download_bytes'] / 1024**3:.1f} GiB). Model files stay on local runtime disk.")
             subprocess.run([str(binary), "pull", spec["model"]],
                            env={**os.environ, "OLLAMA_HOST": host}, timeout=1800, check=True)
@@ -146,5 +148,6 @@ def ensure_service(directory=Path("/content/blackboard-runtime"), *, cpu_smoke=F
         progress(f"Ollama {version} ready; model digest {actual}; reused service={reused}")
         return service
     except BaseException:
-        service.stop()
+        if not reused:
+            service.stop()
         raise

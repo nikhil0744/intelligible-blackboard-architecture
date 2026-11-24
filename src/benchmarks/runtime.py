@@ -12,11 +12,10 @@ from agents.board_client import InMemoryBoard
 from contracts.schemas import BlackboardStatus, PXPTag
 from llm_broker.budget import BudgetExceeded, CallBudget, budget_scope
 from llm_broker.ledger import usage_scope
-from prompts.validation import normalize_claim
 from scheduler.engine import DeterministicScheduler
 from scheduler.policies import RoundRobinPolicy
 
-from .actions import BenchmarkAgent, ToolAction, active_root, root_id
+from .actions import BenchmarkAgent, ToolAction, active_root, benchmark_claim_key, root_id
 from .data_tools import DataTools
 
 
@@ -28,7 +27,7 @@ class Limits:
     task_timeout_s: float = 1200
     tool_timeout_s: float = 15
     run_timeout_s: float = 3600
-    max_tools_per_turn: int = 4
+    max_tools_per_turn: int = 8
 
     def __post_init__(self):
         if min(asdict(self).values()) <= 0:
@@ -57,7 +56,7 @@ class BenchmarkScheduler(DeterministicScheduler):
             if root_id(snapshot, c.contribution_id) == root.contribution_id:
                 if c.metadata.get("final_submission"):
                     final = True
-                if c.tag == PXPTag.RATIFY and normalize_claim(c.payload.prediction.claim) == normalize_claim(root.payload.prediction.claim):
+                if c.tag == PXPTag.RATIFY and benchmark_claim_key(c.payload.prediction.claim) == benchmark_claim_key(root.payload.prediction.claim):
                     votes.add(c.agent_id)
         return final and set(self.registered_agents) <= votes
 
@@ -77,7 +76,7 @@ class SessionRunner:
         board.create_session(task.task_id, task.question, {"permitted_files": list(task.files)}, sid)
         scheduler = BenchmarkScheduler(sid, board, policy=RoundRobinPolicy(), deadlock_window=2, consensus_threshold=3)
         budget = CallBudget(max_attempts=self.limits.max_calls, timeout_s=self.limits.task_timeout_s)
-        tools = DataTools(input_dir, task.files, timeout_s=self.limits.tool_timeout_s)
+        tools = DataTools(input_dir, task.files, timeout_s=self.limits.tool_timeout_s, question=task.question)
         observations = []
         tool_rounds = 0
         latest_query = None
@@ -105,12 +104,14 @@ class SessionRunner:
                     if stop_reason:
                         event("tools_closed", agent_id=agent.agent_id, reason=stop_reason)
                     opening = not snapshot.contributions
-                    if opening and latest_query is not None:
-                        event("evidence_ready", agent_id=agent.agent_id, request_id=latest_query["request_id"])
-                        return agent.action(snapshot, phase="submit")
                     if opening and stop_reason:
-                        raise InsufficientEvidence("Tool budget exhausted before a query returned usable data")
-                    phase = "collect" if opening else "review_closed" if stop_reason else "review"
+                        if latest_query is None:
+                            raise InsufficientEvidence("Tool budget exhausted before a query returned usable, in-scope data")
+                        return agent.action(snapshot, phase="submit")
+                    if opening:
+                        phase = "opening" if latest_query is not None else "collect"
+                    else:
+                        phase = "review_closed" if stop_reason else "review"
                     action = agent.action(snapshot, reminder, phase=phase)
                     if not isinstance(action, ToolAction):
                         return action
@@ -124,6 +125,9 @@ class SessionRunner:
                     if request in requests:
                         event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
                               arguments=args, reason="duplicate_in_turn")
+                        if opening and latest_query is not None:
+                            return agent.action(snapshot, "You already have usable data. Check its scope and submit.",
+                                                phase="submit")
                         if not opening:
                             return agent.action(snapshot, "This tool request already ran in this turn. Use the saved observation.",
                                                 phase="review_closed")
@@ -143,6 +147,7 @@ class SessionRunner:
                     result = tools.execute(request_id, action.name, args)
                     event("tool_observed", request_id=request_id, agent_id=agent.agent_id, result=result)
                     data = result.get("data")
+                    scope_issues = data.get("scope_issues", []) if isinstance(data, dict) else []
                     if action.name == "inspect" and isinstance(file, str) and isinstance(data, dict) and "header" in data:
                         inspected_headers[file] = data["header"]
                     # Keep recent observations inside the ordinary prompt budget. Complete
@@ -156,19 +161,26 @@ class SessionRunner:
                         if action.name == "inspect" and isinstance(data, dict):
                             observation["result"] = {
                                 "ok": result["ok"], "header": data.get("header"), "columns": data.get("columns", [])[:24],
+                                "suggested_header": data.get("suggested_header"),
                                 "raw_first_lines": [line[:140] for line in data.get("raw_first_lines", [])[:6]],
                                 "truncated": True,
                             }
                         else:
                             observation["result"] = {"excerpt": json.dumps(result, ensure_ascii=False)[:1200],
                                                      "truncated": True, "hint": "Narrow query/select/limit to inspect the needed data."}
+                            if scope_issues:
+                                observation["result"]["scope_issues"] = scope_issues
                     if len(json.dumps(observation["arguments"])) > 400:
                         observation["arguments"] = {"excerpt": json.dumps(args)[:400], "truncated": True}
                     observations.append(observation)
                     data = result.get("data")
-                    if (action.name == "query" and result.get("ok") and isinstance(data, dict)
+                    if scope_issues:
+                        event("query_scope_mismatch", agent_id=agent.agent_id, request_id=request_id, issues=scope_issues)
+                    if (action.name == "query" and result.get("ok") and isinstance(data, dict) and not scope_issues
                             and data.get("matched_rows", 0) > 0
                             and (data.get("value") is not None or data.get("rows"))):
+                        if opening and latest_query is None:
+                            event("evidence_ready", agent_id=agent.agent_id, request_id=request_id)
                         latest_query = observation
                         distinct_queries.add(request)
                     recent = observations[-3:]
@@ -219,7 +231,7 @@ class SessionRunner:
                         event("deadlock_detected", recovery_mode="disabled")
                         break
                     turn_signatures.append((contribution.agent_id, contribution.tag,
-                                            normalize_claim(contribution.payload.prediction.claim), len(distinct_queries)))
+                                            benchmark_claim_key(contribution.payload.prediction.claim), len(distinct_queries)))
                     cycle = len(panel)
                     if (len(turn_signatures) >= 2 * cycle
                             and turn_signatures[-2 * cycle:-cycle] == turn_signatures[-cycle:]

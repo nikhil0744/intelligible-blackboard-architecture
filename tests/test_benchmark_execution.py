@@ -400,3 +400,32 @@ def test_persistence_failure_stops_before_next_task(prepared, tmp_path, monkeypa
     with pytest.raises(PersistenceError, match="Drive full"):
         run_batch(prepared, model, SETTINGS, tmp_path / "results", readiness=READINESS, observer=lambda e: None)
     assert len(model.backend.calls) == 5
+
+
+def test_year_only_and_lookalike_queries_need_refinement(tmp_path):
+    (tmp_path / "input.csv").write_text(
+        "Title,,\n,,\nYear,Contributor,Reports\n"
+        "2022,Web Fraud,2\n2022,Web IDT,99\n2023,Web Fraud,4\n2023,Mobile Fraud,30\n"
+    )
+    question = "How many frauds were reported over the web between 2022 and 2023?"
+    tools = DataTools(tmp_path, ("input.csv",), question=question)
+    years = {"column": "Year", "op": "in", "value": [2022, 2023]}
+    for index, (label, issues) in enumerate([(None, True), ("Web IDT", True), ("Web Fraud", False)]):
+        filters = [years]
+        if label:
+            filters.append({"column": "Contributor", "op": "eq", "value": label})
+        result = tools.execute(str(index), "query", {"file": "input.csv", "filters": filters,
+                               "aggregate": {"op": "sum", "column": "Reports"}})
+        assert result["ok"] and bool(result["data"].get("scope_issues")) == issues
+    assert result["data"]["value"] == 6
+
+
+def test_all_categories_ignores_similarly_named_footer(tmp_path):
+    (tmp_path / "input.csv").write_text(
+        "Payment Method, Total $ Loss \nCard,$2M\nCash,$3M\n# of Reports with Payment Method,25% of Total\n"
+    )
+    tools = DataTools(tmp_path, ("input.csv",), question="What is the total loss over all payment methods?")
+    result = tools.execute("all", "query", {"file": "input.csv",
+                           "aggregate": {"column": "total $ loss", "op": "sum"}})
+    assert result["ok"] and result["data"]["value"] == 5
+    assert not result["data"].get("scope_issues")

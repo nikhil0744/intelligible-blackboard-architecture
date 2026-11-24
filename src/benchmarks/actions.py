@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Literal, Union
 
@@ -11,9 +13,52 @@ from agents.base import PEXAgent
 from contracts.schemas import PXPTag
 from prompts import AgentDecision, DecisionParseError, DecisionSemanticError
 from prompts.budget import build_prompt
-from prompts.validation import normalize_claim
+from prompts.validation import normalize_claim, validate_decision
 
 from .data_tools import TOOL_HELP
+
+
+NUMERIC_ANSWER = re.compile(r"[+-]?(?:(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+TERMINAL_ANSWER = re.compile(rf"\b(?:is|equals)\s+({NUMERIC_ANSWER.pattern})[.!]?\s*$", re.IGNORECASE)
+YEAR_QUALIFIER = re.compile(
+    r"\b(?:between\s+[12][0-9]{3}\s+and\s+[12][0-9]{3}"
+    r"|from\s+[12][0-9]{3}\s+(?:to|through)\s+[12][0-9]{3}"
+    r"|(?:in|during|for)\s+[12][0-9]{3})\b",
+    re.IGNORECASE,
+)
+
+
+def numeric_answer(value) -> tuple[str, Decimal]:
+    """Accept a single number, optionally with ordinary thousands separators."""
+    text = str(value).strip()
+    if not NUMERIC_ANSWER.fullmatch(text):
+        raise ValueError("expected one number with no units or other text")
+    text = text.replace(",", "")
+    try:
+        number = Decimal(text)
+    except InvalidOperation as exc:
+        raise ValueError("invalid numeric answer") from exc
+    if not math.isfinite(float(number)):
+        raise ValueError("numeric answer is outside the supported range")
+    return text, number
+
+
+def numeric_claim(claim: str) -> Decimal:
+    """Read a bare claim or an explicit terminal answer after a date-qualified description."""
+    try:
+        return numeric_answer(claim)[1]
+    except ValueError:
+        match = TERMINAL_ANSWER.search(claim)
+        if match and not re.search(r"[0-9]", YEAR_QUALIFIER.sub("", claim[:match.start()])):
+            return numeric_answer(match[1])[1]
+        raise ValueError("claim needs one explicit numeric answer") from None
+
+
+def benchmark_claim_key(claim: str) -> str | Decimal:
+    try:
+        return numeric_claim(claim)
+    except ValueError:
+        return normalize_claim(claim)
 
 
 class ToolAction(BaseModel):
@@ -34,12 +79,14 @@ class DiscussionAction(AgentDecision):
             if self.tag not in {PXPTag.REVISE, PXPTag.RATIFY}:
                 raise ValueError("a final submission must REVISE or RATIFY a claim")
             try:
-                value = Decimal(str(self.output))
-                claim = Decimal(self.prediction.claim.strip())
-            except (ValueError, InvalidOperation):
+                text, value = numeric_answer(self.output)
+                claim = numeric_claim(self.prediction.claim)
+            except ValueError:
                 raise ValueError("this profile requires a numeric output and the same numeric claim")
-            if not value.is_finite() or not claim.is_finite() or value != claim:
+            if value != claim:
                 raise ValueError("final output must equal the numeric prediction.claim")
+            if isinstance(self.output, str):
+                self.output = text
         elif self.output is not None:
             raise ValueError("only kind=final may include an output")
         return self
@@ -52,6 +99,10 @@ class OpeningSubmission(DiscussionAction):
     kind: Literal["final"]
     tag: Literal[PXPTag.REVISE]
     target_contribution_id: None = None
+    output: int | float | str
+
+
+OPENING_ACTION = TypeAdapter(Annotated[Union[ToolAction, OpeningSubmission], Field(discriminator="kind")])
 
 
 def active_root(snapshot):
@@ -74,7 +125,8 @@ ACTION_HELP = """Return one JSON object matching the provided schema.
 For PXP responses, set target_contribution_id to the current claim's ID for RATIFY, REFUTE, or REJECT.
 For final submissions, prediction.claim must be the same bare number as output; include units in the explanation.
 Once the observations support a numeric answer, submit it as "kind":"final" using REVISE or RATIFY.
-A REVISE creates a fresh claim and resets all votes. RATIFY the current root id and repeat its claim exactly;
+A REVISE creates a fresh claim and resets all votes. Use it to amend the answer or its reasoning.
+RATIFY the current root id and repeat its number when you agree with both its answer and reasoning;
 all THREE agents, including the author, must explicitly RATIFY after the latest revision to reach consensus.
 Requesting a tool is not a PXP vote. The controller returns its observation before your next action.
 Never claim success from consensus; grading occurs independently after the session stops.
@@ -89,6 +141,8 @@ class BenchmarkAgent(PEXAgent):
     def output_schema(self):
         if self._phase == "collect":
             return ToolAction.model_json_schema()
+        if self._phase == "opening":
+            return OPENING_ACTION.json_schema()
         if self._phase == "submit":
             return OpeningSubmission.model_json_schema()
         return ACTION.json_schema() if self._phase == "review" else DiscussionAction.model_json_schema()
@@ -100,13 +154,17 @@ class BenchmarkAgent(PEXAgent):
             # bool is a numeric subclass in Python; never turn false into a numeric answer.
             if isinstance(raw, dict) and isinstance(raw.get("output"), bool):
                 raise ValueError("numeric final output cannot be a boolean")
+            if self._phase == "opening":
+                return OPENING_ACTION.validate_python(raw)
+            if self._phase == "submit":
+                return OpeningSubmission.model_validate(raw)
             return ACTION.validate_python(raw)
         except (ValueError, ValidationError) as exc:
             raise DecisionParseError(str(exc)) from exc
 
     def validate_output(self, decision, snapshot):
         if isinstance(decision, ToolAction):
-            if self._phase not in {"collect", "review"}:
+            if self._phase not in {"collect", "opening", "review"}:
                 raise DecisionParseError("Tools are closed for this turn. Return a final submission or a PXP contribution.")
             args = decision.arguments
             if decision.name == "query" and "header" not in args:
@@ -116,9 +174,9 @@ class BenchmarkAgent(PEXAgent):
             return decision, []
         if self._phase == "collect":
             raise DecisionSemanticError("evidence_required", "Request a CSV tool. The board opens after a successful query with data.")
-        if self._phase == "submit" and (decision.kind != "final" or decision.tag != PXPTag.REVISE):
+        if self._phase in {"opening", "submit"} and (decision.kind != "final" or decision.tag != PXPTag.REVISE):
             raise DecisionSemanticError("submission_required", "Submit the evidence-based numeric answer with kind=final and tag=REVISE.")
-        validated, repairs = super().validate_output(decision, snapshot)
+        validated, repairs = validate_decision(decision, snapshot, claim_key=benchmark_claim_key)
         if validated.tag == PXPTag.RATIFY:
             root = active_root(snapshot)
             target = next((c for c in snapshot.contributions
@@ -126,25 +184,33 @@ class BenchmarkAgent(PEXAgent):
             if (root is None or target is None or target.tag not in {PXPTag.REVISE, PXPTag.RATIFY}
                     or root_id(snapshot, target.contribution_id) != root.contribution_id):
                 raise DecisionSemanticError("stale_vote", "RATIFY must target the current REVISE claim or one of its ratifications")
-            if normalize_claim(validated.prediction.claim) != normalize_claim(root.payload.prediction.claim):
+            if benchmark_claim_key(validated.prediction.claim) != benchmark_claim_key(root.payload.prediction.claim):
                 raise DecisionSemanticError("different_claim", "RATIFY must repeat the current root claim")
         return validated, repairs
 
-    def read_with_report(self, snapshot, extra_instructions=None, must_keep_ids=()):
+    def read_with_report(self, snapshot, extra_instructions=None, must_keep_ids=(), *, reserved_tokens=0):
         root = active_root(snapshot)
         if self._phase == "collect":
             instructions = (
                 "Collect evidence before proposing an answer. Return one tool request as JSON. "
-                "For example, list available files with kind=tool, name=list_files, and arguments={}. "
                 "Use inspect to locate columns if needed, then query the CSV for the requested rows or aggregate. "
+                "Match every qualifier in the question, including date range, category, and source when present. "
                 "Use previous observations to choose different arguments.\n" + TOOL_HELP
             )
-        elif self._phase == "submit":
+        elif self._phase in {"opening", "submit"}:
             instructions = (
-                "Tools are closed for this turn. Submit a numeric answer from the observed CSV data. "
-                "Return kind=final, tag=REVISE, and target_contribution_id=null. "
+                "Check whether the observed query and its result cover every qualifier in the question. "
+                "A successful query can still be too broad. "
+                "For submission use kind=final, tag=REVISE, and target_contribution_id=null. "
                 "Use the same bare number for prediction.claim and output. Cite the rows or calculation in your explanation."
             )
+            if self._phase == "opening":
+                instructions += (
+                    "\nIf the existing evidence answers the question, submit it now. "
+                    "If a qualifier is missing, request one new, more specific query or calculation.\n" + TOOL_HELP
+                )
+            else:
+                instructions += "\nTools are closed for this turn. Submit the best answer supported by the observed CSV data."
         else:
             instructions = ACTION_HELP
             if self._phase == "review":
@@ -152,13 +218,17 @@ class BenchmarkAgent(PEXAgent):
             else:
                 instructions += "\nTools are closed for this turn. Review the current claim using saved evidence."
         if root:
-            instructions += f"\nCurrent claim root id={root.contribution_id}."
+            instructions += (
+                f"\nCurrent claim root id={root.contribution_id}. "
+                f'For RATIFY, REFUTE, or REJECT on this claim, set "target_contribution_id":"{root.contribution_id}".'
+            )
             must_keep_ids = tuple(set(must_keep_ids) | {root.contribution_id})
         if extra_instructions:
             instructions += "\n" + extra_instructions
+        budget = self.prompt_token_budget
         return build_prompt(
             self.persona, snapshot, self.agent_id, self.system_addendum, self.max_history,
-            token_budget=self.prompt_token_budget, must_keep_ids=must_keep_ids,
+            token_budget=None if budget is None else max(budget - reserved_tokens, 0), must_keep_ids=must_keep_ids,
             output_contract=instructions, next_action="Return the JSON action required by the current phase.",
             empty_board="(no contributions yet)",
         )

@@ -6,6 +6,7 @@ Ollama >= 0.5 accepts a JSON schema in `format`, which constrains decoding so
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -16,7 +17,11 @@ from ..types import LLMError, LLMRequest, LLMResponse
 
 
 def _count(v: Any) -> Any:
-    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    if type(v) is int and v >= 0:
+        return v
+    if type(v) is float and v >= 0 and v.is_integer():
+        return int(v)
+    return None
 
 
 class OllamaBackend:
@@ -50,7 +55,7 @@ class OllamaBackend:
                 return self._response_object(resp.read())
         except urllib.error.HTTPError as e:
             raise LLMError(f"Ollama HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:300]}") from e
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
+        except (OSError, http.client.HTTPException) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
 
     def _get(self, path: str) -> Dict[str, Any]:
@@ -58,7 +63,7 @@ class OllamaBackend:
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return self._response_object(resp.read())
-        except (urllib.error.URLError, OSError) as e:
+        except (OSError, http.client.HTTPException) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
 
     def version(self) -> str:
@@ -125,8 +130,13 @@ class OllamaBackend:
         message = data.get("message")
         if not isinstance(message, dict) or not isinstance(message.get("content"), str):
             raise LLMError("Ollama chat response is missing text content")
+        text = message["content"]
+        try:
+            text.encode("utf-8")
+        except UnicodeError as exc:
+            raise LLMError("Ollama chat response contains invalid Unicode") from exc
         return LLMResponse(
-            text=message["content"],
+            text=text,
             model=model,
             backend=self.name,
             # Ollama omits these counts in some cases (e.g. a fully cached prompt): report unknown, not 0.
