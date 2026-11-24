@@ -10,6 +10,9 @@ from difflib import get_close_matches
 from io import StringIO
 from pathlib import Path
 
+# Initialize the native CSV stack in the parent before workers inherit memory limits.
+import pandas as pd
+
 from .evidence import query_scope_issues
 
 
@@ -87,7 +90,6 @@ def _repair_year_header(df, number):
 
 
 def _operation(root: str, allowed: tuple[str, ...], name: str, args: dict, question=None):
-    import pandas as pd
     if name == "list_files":
         return list(allowed)
     if name == "calculate":
