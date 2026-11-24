@@ -63,13 +63,12 @@ def root_id(snapshot, contribution_id):
     return None
 
 
-ACTION_HELP = """For this benchmark, return ONE of these JSON action shapes (this replaces the earlier output shape):
-1. Tool request: {"kind":"tool","name":"inspect","arguments":{"file":"a permitted CSV"}}
-2. Discussion: {"kind":"contribution","tag":"REVISE|RATIFY|REFUTE|REJECT","target_contribution_id":null,
+ACTION_HELP = """For this benchmark, return ONE JSON action (this replaces the earlier output shape):
+Discussion: {"kind":"contribution","tag":"REVISE|RATIFY|REFUTE|REJECT","target_contribution_id":null,
    "prediction":{"claim":"short claim","confidence":0.5},"explanation":{"rationale":"why","evidence":[]}}
-3. Final submission: same as discussion, but "kind":"final", plus "output":123.
+Final submission: same as discussion, but "kind":"final", plus "output":123.
 For final submissions, prediction.claim must be the same bare number as output; include units in the explanation.
-Use tools to inspect real data before proposing answers. The critic should check the computation independently.
+Once the observations support a numeric answer, submit it as "kind":"final" using REVISE or RATIFY.
 A REVISE creates a fresh claim and resets all votes. RATIFY the current root id and repeat its claim exactly;
 all THREE agents, including the author, must explicitly RATIFY after the latest revision to reach consensus.
 Requesting a tool is not a PXP vote. The controller returns its observation before your next action.
@@ -80,8 +79,10 @@ Never claim success from consensus; grading occurs independently after the sessi
 class BenchmarkAgent(PEXAgent):
     """Uses the ordinary broker, prompt budget, parse repairs, personas, and usage ledger."""
 
+    _tools_allowed = True
+
     def output_schema(self):
-        return ACTION.json_schema()
+        return ACTION.json_schema() if self._tools_allowed else DiscussionAction.model_json_schema()
 
     def parse_output(self, text):
         try:
@@ -95,6 +96,8 @@ class BenchmarkAgent(PEXAgent):
 
     def validate_output(self, decision, snapshot):
         if isinstance(decision, ToolAction):
+            if not self._tools_allowed:
+                raise DecisionParseError("Tools are closed for this turn. Return a final submission or a PXP contribution.")
             if len(json.dumps(decision.arguments)) > 8000:
                 raise DecisionParseError("tool arguments exceed 8000 characters")
             return decision, []
@@ -109,7 +112,15 @@ class BenchmarkAgent(PEXAgent):
 
     def read_with_report(self, snapshot, extra_instructions=None, must_keep_ids=()):
         root = active_root(snapshot)
-        instructions = ACTION_HELP + "\n" + TOOL_HELP
+        instructions = ACTION_HELP
+        if self._tools_allowed:
+            instructions += (
+                '\nTool request shape: {"kind":"tool","name":"inspect","arguments":{"file":"a permitted CSV"}}. '
+                "Use the tools when you need evidence. Reuse prior observations and avoid repeating requests."
+                "\n" + TOOL_HELP
+            )
+        else:
+            instructions += "\nTools are closed for this turn. Post a final answer if supported, or a PXP contribution explaining the uncertainty."
         if root:
             instructions += f"\nCurrent claim root id={root.contribution_id}."
             must_keep_ids = tuple(set(must_keep_ids) | {root.contribution_id})
@@ -117,8 +128,13 @@ class BenchmarkAgent(PEXAgent):
             instructions += "\n" + extra_instructions
         return super().read_with_report(snapshot, instructions, must_keep_ids)
 
-    def action(self, snapshot, extra_instructions=None):
-        formulation = self.formulate(snapshot, extra_instructions)
+    def action(self, snapshot, extra_instructions=None, *, tools_allowed=True):
+        previous = self._tools_allowed
+        self._tools_allowed = tools_allowed
+        try:
+            formulation = self.formulate(snapshot, extra_instructions)
+        finally:
+            self._tools_allowed = previous
         decision = formulation.decision
         if isinstance(decision, ToolAction):
             return decision

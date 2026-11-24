@@ -11,6 +11,7 @@ from pathlib import Path
 TOOL_HELP = """Tools (arguments are JSON, never Python):
 list_files {} -> permitted CSV names
 inspect {file, header?:0, rows?:8} -> raw first lines, schema and rows; header is a zero-based row number
+  For CSVs with title or preamble rows, choose the row with the real column names.
 query {file, header?:0, filters?:[{column,op,value}], select?:[columns], aggregate?:{column?,op}, group_by?:[columns], limit?:10}
   filters: eq, ne, contains, gt, ge, lt, le; contains is literal/case-insensitive.
   aggregate: count (rows), sum, mean, min, max. Numeric conversion strips commas, $, %, K/M/B unit suffixes;

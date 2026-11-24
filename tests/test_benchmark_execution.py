@@ -117,6 +117,31 @@ def test_actual_agents_tools_grade_and_per_attempt_usage(prepared, tmp_path):
     assert RunStore(store.root).summarize() == summary
 
 
+@pytest.mark.parametrize("repeat_request", [True, False])
+def test_tool_loop_yields_to_other_agents(prepared, tmp_path, repeat_request):
+    class LoopingBackend(ScriptedBackend):
+        def complete(self, request, model):
+            if request.agent_id == "analyst" and "Current claim root" not in request.messages[0].content:
+                if "Tools are closed" not in request.messages[0].content:
+                    return LLMResponse(text=json.dumps({"kind": "tool", "name": "query",
+                        "arguments": {"file": "input.csv", "limit": 1 if repeat_request else 2,
+                                      "aggregate": {"column": "value", "op": "sum"}}}),
+                        model=model, backend=self.name)
+                assert request.json_schema["properties"]["kind"]["enum"] == ["contribution", "final"]
+                assert '"value": 6.0' in request.messages[1].content
+            return super().complete(request, model)
+
+    model = broker(LoopingBackend())
+    store, _ = run_batch(prepared, model, SETTINGS, tmp_path / "results", limit=1,
+                         limits=Limits(max_tool_rounds=8, max_tools_per_turn=4 if repeat_request else 1),
+                         readiness=READINESS, observer=lambda e: None)
+    result = store.attempts()[0]
+    assert result["tool_rounds"] == 1
+    assert result["turns"] == 4
+    assert result["consensus"] and result["grade"]["correct"]
+    assert {"analyst", "critic", "reasoner"} <= set(model.backend.calls)
+
+
 def test_interrupt_after_commit_resume_preserves_wrong_answers(prepared, tmp_path):
     model = broker(ScriptedBackend(answer=5, tools=False))
     saved = []

@@ -28,6 +28,7 @@ class Limits:
     task_timeout_s: float = 1200
     tool_timeout_s: float = 15
     run_timeout_s: float = 3600
+    max_tools_per_turn: int = 4
 
     def __post_init__(self):
         if min(asdict(self).values()) <= 0:
@@ -57,10 +58,6 @@ class BenchmarkScheduler(DeterministicScheduler):
         return final and set(self.registered_agents) <= votes
 
 
-class ToolLimit(RuntimeError):
-    pass
-
-
 class SessionRunner:
     """One controller owns tools and commits; reference data is not an argument here."""
 
@@ -87,14 +84,28 @@ class SessionRunner:
         def handler(agent):
             def turn(snapshot, scheduled):
                 nonlocal tool_rounds
+                requests = set()
                 while True:
                     budget.check()
                     snapshot = board.get_snapshot(sid)
-                    action = agent.action(snapshot)
+                    if tool_rounds >= self.limits.max_tool_rounds:
+                        stop_reason = "session_tool_budget"
+                    elif len(requests) >= self.limits.max_tools_per_turn:
+                        stop_reason = "turn_tool_budget"
+                    else:
+                        stop_reason = None
+                    if stop_reason:
+                        event("tools_closed", agent_id=agent.agent_id, reason=stop_reason)
+                    action = agent.action(snapshot, tools_allowed=stop_reason is None)
                     if not isinstance(action, ToolAction):
                         return action
-                    if tool_rounds >= self.limits.max_tool_rounds:
-                        raise ToolLimit("tool_limit")
+                    request = (action.name, json.dumps(action.arguments, sort_keys=True))
+                    if request in requests:
+                        event("tool_request_blocked", agent_id=agent.agent_id, name=action.name,
+                              arguments=action.arguments, reason="duplicate_in_turn")
+                        return agent.action(snapshot, "This tool request already ran in this turn. Use the saved observation.",
+                                            tools_allowed=False)
+                    requests.add(request)
                     request_id = uuid4().hex
                     tool_rounds += 1
                     event("tool_requested", request_id=request_id, agent_id=agent.agent_id,
@@ -166,8 +177,6 @@ class SessionRunner:
             status = reason or exc.kind
         except BudgetExceeded as exc:
             status, error = exc.reason, {"error": str(exc)}
-        except ToolLimit as exc:
-            status, error = "tool_limit", {"error": str(exc)}
         except KeyboardInterrupt:
             status, error = "interrupted", {"error": "Stopped by user; resume restarts this task as a new attempt."}
         finally:
