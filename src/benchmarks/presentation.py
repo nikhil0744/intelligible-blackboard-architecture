@@ -185,9 +185,10 @@ def export_viewer(run_dir, template=None, attempt_id=None):
     tokens = result["usage"]["total_tokens"]
     token_text = f"Attempt total: {tokens if tokens is not None else 'unknown'} tokens • {result['elapsed_s']:.2f}s"
     steps = []
-    for event in events:
+    timeline = _recorded_timeline(events)
+    for event, display in zip(events, timeline):
         kind = event["kind"]
-        if kind not in {"session_started", "contribution", "tool_requested", "tool_observed", "session_stopped", "evaluation"}:
+        if not kind.startswith("recovery_") and kind not in {"session_started", "contribution", "tool_requested", "tool_observed", "session_stopped", "evaluation", "query_scope_mismatch", "deadlock_detected"}:
             continue
         step = {"step": len(steps), "turn": f"Event {len(steps)} • {kind}", "timestamp": event["time"],
                 "narrative": kind.replace("_", " "), "agentActive": index.get(event.get("agent_id")),
@@ -196,7 +197,7 @@ def export_viewer(run_dir, template=None, attempt_id=None):
                 "deadlock": False, "sandboxVisible": False, "thoughtFlows": []}
         if kind == "session_started":
             step["claim"] = first["task"]["question"]
-            step["rationale"] = "Recorded baseline session; recovery disabled."
+            step["rationale"] = f"Recovery mode: {first.get('recovery_mode', 'unrecorded')}"
         elif kind == "contribution":
             c = event["contribution"]
             p, x = c["payload"]["prediction"], c["payload"]["explanation"]
@@ -209,25 +210,28 @@ def export_viewer(run_dir, template=None, attempt_id=None):
                 "evidence": "; ".join(x["evidence"]) or "No evidence cited",
                 "hypothesis": p["claim"], "deliberation": x["rationale"], "action": c["tag"],
                 "conf": str(p["confidence"])}
-        elif kind.startswith("tool_"):
-            step["claim"] = event.get("name", "Tool observation")
-            step["rationale"] = json.dumps(event.get("arguments", event.get("result")), ensure_ascii=False)
-            step["narrative"] = f"{kind} • request {event['request_id']}"
+        elif kind.startswith(("tool_", "recovery_")) or kind in {"query_scope_mismatch", "deadlock_detected"}:
+            step["claim"] = display["active_claim"] or "No claim proposed yet"
+            step["rationale"] = display["detail"] or display["title"]
+            step["narrative"] = f"{display['title']} • {display['branch']}"
         elif kind == "session_stopped":
             step["status"] = event["status"].upper()
             step["deadlock"] = event["status"] == "deadlock"
-            step["deadlockMsg"] = "Recorded disagreement; baseline recovery is disabled."
+            step["deadlockMsg"] = "Recorded disagreement remained unresolved."
             step["claim"] = f"Final output: {result['output']}"
             step["rationale"] = f"Consensus recorded: {event['consensus']}. Independent grading follows."
         else:
             step["status"] = result["status"].upper()
             step["claim"] = f"Grade: {json.dumps(event['grade'])}"
             step["rationale"] = "Selected profile metric only; consensus and correctness are separate."
+        if kind == "contribution":
+            step["claim"] = display["active_claim"] or "No claim proposed yet"
+            step["narrative"] += f" • Votes: {len(display['ratifiers'])}/{len(agents)}"
         steps.append(step)
     trace = {"mode": "recorded_benchmark", "title": f"{result['task_id']} • {result['attempt_id'][:8]}",
              "task": first["task"]["question"], "sessionId": result["session_id"], "hardware": hardware,
              "agents": agents, "sandbox": None, "steps": steps, "result": result,
-             "timeline": _recorded_timeline(events),
+             "timeline": timeline,
              "source": str(store.root), "official_aggregate": False}
     output = store.root / "presentation" / result["attempt_id"]
     output.mkdir(parents=True, exist_ok=True)
