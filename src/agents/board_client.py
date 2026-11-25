@@ -35,7 +35,7 @@ class StaleTurnError(ValueError):
 
 
 class InMemoryBoard:
-    """Thread-safe single-process stand-in for S1's blackboard (dev/tests only)."""
+    """Thread-safe board for single-process runs; commits remain scheduler-owned."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -64,6 +64,22 @@ class InMemoryBoard:
         with self._lock:
             return self._sessions[session_id].model_copy(deep=True)
 
+    def next_turn_index(self, session_id: str) -> int:
+        return len(self.get_snapshot(session_id).contributions)
+
+    def update_context(self, session_id: str, context: Dict[str, Any]) -> None:
+        """Replace agent-visible observations under the same lock as contributions."""
+        with self._lock:
+            snap = self._sessions[session_id]
+            snap.initial_context = copy.deepcopy(context)
+            snap.version += 1
+            snap.updated_at = datetime.now(timezone.utc)
+
+    def set_status(self, session_id: str, status: BlackboardStatus | str) -> None:
+        with self._lock:
+            self._sessions[session_id].status = BlackboardStatus(status)
+            self._sessions[session_id].updated_at = datetime.now(timezone.utc)
+
     def submit(self, contribution: AgentContribution) -> BlackboardSnapshot:
         with self._lock:
             snap = self._sessions[contribution.session_id]
@@ -72,6 +88,10 @@ class InMemoryBoard:
                     f"turn_index {contribution.turn_index} != expected {len(snap.contributions)}"
                 )
             ids = {c.contribution_id for c in snap.contributions}
+            if contribution.contribution_id in ids:
+                raise ValueError("duplicate contribution_id")
+            if snap.status not in (BlackboardStatus.ACTIVE, BlackboardStatus.DEADLOCK):
+                raise ValueError("session is terminal")
             if contribution.tag != PXPTag.REVISE and contribution.target_contribution_id not in ids:
                 raise ValueError(f"{contribution.tag.value} must target an existing contribution")
             snap.contributions.append(copy.deepcopy(contribution))

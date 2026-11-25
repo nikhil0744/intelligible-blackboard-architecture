@@ -1,0 +1,210 @@
+"""Regression cases for the model-facing benchmark and Ollama paths."""
+
+import http.client
+import json
+
+import pytest
+
+from agents.board_client import InMemoryBoard
+from benchmarks.actions import BenchmarkAgent, ToolAction
+from benchmarks.persistence import Attempt
+from benchmarks.preparation import TaskInput
+from benchmarks.runtime import Limits, SessionRunner
+from llm_broker import ChatMessage, InferenceSettings, LLMError, LLMRequest, LLMResponse, ModelBroker
+from llm_broker.backends.mock import MockBackend
+from llm_broker.backends.ollama import OllamaBackend
+from prompts import DecisionParseError, DecisionSemanticError
+
+
+def final(claim, output, *, tag="REVISE", target=None):
+    return json.dumps({
+        "kind": "final", "tag": tag, "target_contribution_id": target,
+        "prediction": {"claim": claim, "confidence": 0.7},
+        "explanation": {"rationale": "I checked the result against the tool observation."},
+        "output": output,
+    })
+
+
+def test_single_numeric_submission_and_explicit_root_vote():
+    submitted = {
+        "kind": "final", "tag": "REVISE", "output": 1240, "confidence": 0.8,
+        "explanation": {"rationale": "I checked the result against the tool observation."},
+    }
+    backend = MockBackend([json.dumps(submitted)])
+    board = InMemoryBoard()
+    initial = board.create_session("task", "How many reports in 2024?")
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, max_parse_retries=0)
+        root = agent.action(initial, phase="submit")
+        assert root.payload.prediction.claim == "1240"
+        assert root.metadata["final_output"] == 1240
+        assert "prediction" not in backend.calls[0].json_schema["properties"]
+        assert "output" in backend.calls[0].json_schema["required"]
+        assert backend.calls[0].json_schema["properties"]["output"]["type"] == "number"
+        snapshot = board.submit(root)
+        vote = {
+            "kind": "ratify", "target_contribution_id": root.contribution_id, "confidence": 0.9,
+            "explanation": {"rationale": "The selected rows support the claim."},
+        }
+        backend.responses.append(json.dumps(vote))
+        accepted = agent.action(snapshot, phase="review_closed")
+        assert accepted.tag.value == "RATIFY"
+        assert accepted.payload.prediction.claim == root.payload.prediction.claim
+        assert not accepted.metadata["final_submission"]
+        properties = backend.calls[1].json_schema["$defs"]["RootRatification"]["properties"]
+        assert properties["target_contribution_id"]["const"] == root.contribution_id
+        assert "prediction" not in properties
+
+        revised = agent.to_contribution(snapshot, agent.parse_output(json.dumps({**submitted, "output": 1241})))
+        snapshot = board.submit(revised)
+        with pytest.raises(DecisionSemanticError, match="exact current claim root"):
+            agent.validate_output(agent.parse_output(json.dumps(vote)), snapshot)
+        with pytest.raises(DecisionSemanticError, match="but your claim"):
+            legacy = final("1240", 1240, tag="RATIFY", target=revised.contribution_id)
+            agent.validate_output(agent.parse_output(legacy), snapshot)
+
+
+def test_opening_allows_query_refinement_or_a_supported_submission():
+    query = json.dumps({
+        "kind": "tool", "name": "query",
+        "arguments": {"file": "reports.csv", "filters": [{"column": "Year", "op": "ge", "value": 2022}]},
+    })
+    claim = "The total number of fraud reports by FTC over the web between 2022 and 2024 is 17,338,277."
+    backend = MockBackend([query, final(claim, "17,338,277")])
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, max_parse_retries=0)
+        snapshot = InMemoryBoard().create_session("task", "How many reports from 2022 through 2024?")
+        action = agent.action(snapshot, phase="opening")
+        assert isinstance(action, ToolAction) and action.arguments["filters"][0]["value"] == 2022
+        assert "more specific query" in backend.calls[0].messages[0].content
+        contribution = agent.action(snapshot, phase="submit")
+        assert contribution.payload.prediction.claim == claim
+        assert contribution.metadata["final_output"] == "17338277"
+
+
+@pytest.mark.parametrize("claim", [
+    "The answer is 4 or 5.",
+    "The answer is 4, but the answer is 5.",
+    "The count for 2024 is 5, while the overall answer is 4.",
+    "The answer is 4 to 5.",
+    "The answer is 5.",
+])
+def test_final_rejects_ambiguous_or_mismatched_claims(claim):
+    agent = BenchmarkAgent("analyst", "data_analyst", None)
+    with pytest.raises(DecisionParseError):
+        agent.parse_output(final(claim, 4))
+
+
+def test_ratify_accepts_numeric_equivalence_and_preserves_target():
+    backend = MockBackend([
+        final("For 2024 the total is 1,240.", 1240),
+        final("1240.0", 1240, tag="RATIFY"),
+    ])
+    board = InMemoryBoard()
+    initial = board.create_session("task", "How many reports in 2024?")
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, max_parse_retries=0)
+        opening = agent.action(initial, phase="submit")
+        snapshot = board.submit(opening)
+        backend.responses[1] = final("1240.0", 1240, tag="RATIFY", target=opening.contribution_id)
+        contribution = agent.action(snapshot, phase="review_closed")
+        assert contribution.target_contribution_id == opening.contribution_id
+        assert contribution.payload.prediction.claim == opening.payload.prediction.claim
+
+
+def test_model_repairs_keep_only_latest_error_and_phase_constraints():
+    backend = MockBackend(["invalid-first", "invalid-second", final("4", 4)])
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, max_parse_retries=2)
+        snapshot = InMemoryBoard().create_session("task", "How many reports in 2024?")
+        contribution = agent.action(snapshot, phase="submit")
+    assert contribution.metadata["parse_attempts"] == 3
+    assert "Tools are closed" in backend.calls[2].messages[0].content
+    assert [message.content for message in backend.calls[2].messages if message.role == "assistant"] == ["invalid-second"]
+    assert contribution.metadata["raw_responses"][:2] == ["invalid-first", "invalid-second"]
+
+
+@pytest.mark.parametrize(("answer_type", "output", "schema_type"), [
+    ("numeric_approximate", 1.25, "number"),
+    ("string_exact", "No", "string"),
+    ("list_exact", [2022, 2024], "array"),
+    ("list_exact", ["Alabama", "Georgia"], "array"),
+])
+def test_submission_uses_task_answer_type(answer_type, output, schema_type):
+    response = {"kind": "final", "tag": "REVISE", "output": output, "confidence": 0.8,
+                "explanation": {"rationale": "The selected rows support the answer."}}
+    backend = MockBackend([json.dumps(response)])
+    with ModelBroker(backend, default_model="mock") as broker:
+        agent = BenchmarkAgent("analyst", "data_analyst", broker, answer_type=answer_type, max_parse_retries=0)
+        snapshot = InMemoryBoard().create_session("task", "Answer from the observed CSV data.")
+        contribution = agent.action(snapshot, phase="submit")
+        assert contribution.metadata["final_output"] == output
+        schema = backend.calls[0].json_schema["properties"]["output"]
+        assert schema["type"] == schema_type
+        wrong_value = "not a supported answer" if schema_type != "string" else ["No"]
+        with pytest.raises(DecisionParseError):
+            agent.parse_output(json.dumps({**response, "output": wrong_value}))
+
+
+def test_multifile_collects_each_source_and_preserves_advisory_evidence(tmp_path):
+    files = ("source-a.csv", "source-b.csv")
+    for filename in files:
+        (tmp_path / filename).write_text("Year,Count\n2022,2\n2024,4\n")
+    task = TaskInput(task_id="multi", question="Which years between 2022 and 2024 match?",
+                     files=files, answer_type="list_exact", scope_mode="advisory")
+    attempt = Attempt(tmp_path / "attempt", {"session_id": "s", "attempt_id": "a"})
+
+    class EvidenceBackend:
+        name = "fixture"
+        queries = 0
+
+        def complete(self, request, model):
+            system = request.messages[0].content
+            if request.json_schema.get("title") == "ToolAction":
+                filename, year = (files[0], 2022) if self.queries == 0 else (files[1], 2024)
+                self.queries += 1
+                action = {"kind": "tool", "name": "query",
+                          "arguments": {"file": filename, "filters": [{"column": "Year", "op": "eq", "value": year}]}}
+            else:
+                root = request.json_schema.get("$defs", {}).get("RootRatification")
+                explanation = {"rationale": "Both source CSVs were checked."}
+                if root:
+                    action = {"kind": "ratify", "target_contribution_id": root["properties"]["target_contribution_id"]["const"],
+                              "confidence": 1, "explanation": explanation}
+                else:
+                    assert self.queries == 2
+                    assert "query_evidence_by_file" in request.messages[1].content
+                    assert "scope_issues" in request.messages[1].content
+                    assert "JSON array" in system
+                    action = {"kind": "final", "tag": "REVISE", "output": [2022, 2024],
+                              "confidence": 1, "explanation": explanation}
+            return LLMResponse(text=json.dumps(action), model=model, backend=self.name)
+
+    events = []
+    settings = InferenceSettings(model="mock")
+    with ModelBroker(EvidenceBackend(), default_model="mock") as broker:
+        result = SessionRunner(broker, settings, Limits(), observer=events.append).execute(task, tmp_path, attempt)
+    assert result["status"] == "consensus" and result["output"] == [2022, 2024]
+    ready = next(event for event in events if event["kind"] == "evidence_ready")
+    assert len(ready["evidence_request_ids"]) == 2
+
+
+def test_ollama_wraps_incomplete_http_payload(monkeypatch):
+    def incomplete(*args, **kwargs):
+        raise http.client.IncompleteRead(b'{"message":', 24)
+
+    monkeypatch.setattr("urllib.request.urlopen", incomplete)
+    backend = OllamaBackend()
+    request = LLMRequest(messages=[ChatMessage(role="user", content="count")])
+    with pytest.raises(LLMError, match="Ollama unreachable"):
+        backend.complete(request, "mock")
+
+
+def test_ollama_reports_malformed_usage_as_unknown(monkeypatch):
+    backend = OllamaBackend()
+    monkeypatch.setattr(backend, "_post", lambda *args: {
+        "message": {"content": "answer"}, "prompt_eval_count": float("inf"), "eval_count": 2,
+    })
+    request = LLMRequest(messages=[ChatMessage(role="user", content="count")])
+    result = backend.complete(request, "mock")
+    assert result.text == "answer" and result.total_tokens is None

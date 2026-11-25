@@ -2,6 +2,20 @@
 
 A multi-agent research project combining prediction/explanation exchanges (PXP), shared blackboard state, deterministic scheduling, counterfactual deadlock recovery, benchmark evaluation, and a React visualization dashboard.
 
+## Run the benchmarks in Colab
+
+| Notebook | What it runs |
+| --- | --- |
+| [KramaBench](https://colab.research.google.com/github/nikhil0744/intelligible-blackboard-architecture/blob/main/notebooks/colab_benchmarks.ipynb) | A fixed 20-task legal CSV profile and a three-task pilot. Includes bounded evidence recovery, Drive resume, and recorded playback. |
+| [MSCoRe with recovery](https://colab.research.google.com/github/nikhil0744/intelligible-blackboard-architecture/blob/main/notebooks/colab_mscore_recovery.ipynb) | Three or 20 Chinese true/false construction judgments, with a recovery switch and a task picker for recorded playback. |
+| [Original MSCoRe baseline](https://colab.research.google.com/github/nikhil0744/intelligible-blackboard-architecture/blob/main/notebooks/colab_mscore.ipynb) | Historical runner used for the three-task pilot and 20-task baseline. It stops on deadlock. |
+
+Select a GPU runtime and run the notebook cells in order. The notebooks use local Ollama inference with a quantized Qwen2.5-7B model and save results to Google Drive. Each notebook pins its project checkout. In KramaBench, set `TASK_COUNT = 1` for a quick check or keep the default 20-task profile. In MSCoRe, select three tasks first. Use `RECOVERY_ENABLED` to toggle recovery and keep the model, task IDs, and runner version fixed when comparing two runs.
+
+Read the task grades separately from consensus. MSCoRe v3.2.0 records independent first ballots, detects repeated split votes, and can open a new branch with a dissenting agent as the first proposer. A recovery answer replaces the original submission only after unanimous agreement. Cell 6 opens the recorded visualizer. The benchmark runs evaluate selected subsets. MedAgentBench remains unavailable in Colab pending verification of its official environment and evaluator.
+
+The [KramaBench Colab guide](docs/guides/colab-benchmarks.md) covers profiles, resuming, and exporting results.
+
 ## Repository layout
 
 | Location | Purpose |
@@ -58,7 +72,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>. The dashboard includes demo data. Build it with `npm run build` from `frontend/`.
+Open <http://localhost:5173>. The dashboard includes demo data and a mock ablation runner backed by the FastAPI benchmark endpoints. Use the Colab notebooks for evaluations on the selected benchmark tasks. Build it with `npm run build` from `frontend/`.
 
 ## Verification and examples
 
@@ -69,7 +83,7 @@ python -m fixtures.spike_starter
 python -m benchmarks.mscore --mock --trials 8
 ```
 
-The benchmark command writes `outputs/results.csv`, `outputs/results.json`, and `outputs/figures/`. Override destinations using `--out-csv`, `--out-json`, and `--figures-dir`. The plotting helper also defaults to `outputs/figures/`.
+The historical `benchmarks.mscore` simulation writes `outputs/results.csv`, `outputs/results.json`, and `outputs/figures/`. Override destinations using `--out-csv`, `--out-json`, and `--figures-dir`. The Colab MSCoRe notebooks use their own live runner. The `benchmarks.run` CLI provides the live KramaBench path.
 
 Saved [example results](examples/benchmark-results/README.md) are simulation outputs. They illustrate output formats and plots rather than establish live-model performance.
 

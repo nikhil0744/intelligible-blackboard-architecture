@@ -1,0 +1,123 @@
+% CS F407 Artificial Intelligence: final project report template.
+% Limit: 2 pages, including everything except references.
+% Do not change the font size, margins or spacing.
+\documentclass[11pt,a4paper,twocolumn]{article}
+
+\usepackage[margin=2cm,columnsep=0.8cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\titleformat{\section}{\normalsize\bfseries}{\thesection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.3ex}{0.6ex}
+\setlist{nosep,leftmargin=*}
+\setlength{\parskip}{0.3ex}
+
+\newcommand{\coursename}{CS F407 Artificial Intelligence, AY 2026--27 Semester I}
+\newcommand{\teamno}{Team XX}
+\newcommand{\githuburl}{https://github.com/username/repository}
+
+\begin{document}
+
+\twocolumn[{%
+\begin{center}
+  {\large\bfseries Project Title: Concise and Informative}\\[1ex]
+  \teamno\\
+  Member One (2022A7PS0001G), Member Two (2022A7PS0002G), Member Three (2022A7PS0003G)\\[0.5ex]
+  {\small \coursename, BITS Pilani, K.K. Birla Goa Campus}\\[1.5ex]
+  \begin{minipage}{0.85\textwidth}
+    \small
+    \centerline{\bfseries Abstract}\vspace{0.5ex}
+    In 100--150 words: the problem, why it matters, what you did, the main result
+    (with a number, if you have one), and the main conclusion.
+  \end{minipage}
+\end{center}
+\vspace{1.5ex}
+}]
+
+\section{Introduction}
+State the problem and its motivation. Say clearly what the input and output of your system
+are, and list your contributions in one or two sentences.
+
+\section{Background and related work}
+Briefly describe the AI techniques you build on (for example, search, SAT, game playing,
+planning, probabilistic models, LLMs) and the closest existing work, with
+citations~\cite{russell2021aima}.
+
+\section{Method}
+Describe your approach in enough detail for someone else to reproduce it. Use equations,
+pseudocode or a small figure where it helps. If an LLM is part of the method, give the
+model, how it is used (prompting, tool use, fine-tuning), and any prompts that matter.
+
+\section{Experimental setup}
+Datasets or problem instances, baselines, evaluation metrics, and the hardware and software
+used.
+
+\section{Results}
+Report your main results in a table or a figure and explain what they show.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Method & Metric 1 & Metric 2 \\
+\midrule
+Baseline & 0.00 & 0.00 \\
+Ours & 0.00 & 0.00 \\
+\bottomrule
+\end{tabular}
+\caption{Main results. Say what the metrics are and whether higher or lower is better.}
+\label{tab:results}
+\end{table}
+
+\section{Discussion and limitations}
+Interpret the results. Where does your approach fail, and why? What would you do next?
+
+\section{Conclusion}
+Two or three sentences summarising what you found.
+
+\section*{Individual member contributions}
+{\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Name & Contribution \\
+\midrule
+Member One & For example: problem formulation, search implementation, Sections 1 and 3. \\
+Member Two & For example: LLM pipeline, experiments, Section 5. \\
+Member Three & For example: data preparation, evaluation, Sections 4 and 6. \\
+\bottomrule
+\end{tabularx}}
+
+\smallskip
+\noindent All members have read this report and agree with the statement above.
+
+\section*{Generative AI disclosure}
+State which generative AI tools you used (name and version), what you used them for
+(for example, writing or debugging code, editing text, generating data), and which parts of
+the report or code they affected. State that you checked all such output and take
+responsibility for it. If you used none, write: ``No generative AI tools were used in this
+project.'' Use of an LLM as part of the method itself goes in Section~3, not here.
+
+\section*{Code availability}
+\noindent Code and data:\\
+\url{\githuburl}\\
+The repository must be public and must contain a README with instructions to reproduce the
+results reported here.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{russell2021aima}
+S.~Russell and P.~Norvig.
+\newblock \emph{Artificial Intelligence: A Modern Approach}, 4th edition.
+\newblock Pearson, 2021.
+\end{thebibliography}
+
+\end{document}

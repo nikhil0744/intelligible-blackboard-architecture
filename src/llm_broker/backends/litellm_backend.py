@@ -31,7 +31,7 @@ class LiteLLMBackend:
             messages=[m.model_dump() for m in request.messages],
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            timeout=self.timeout_s,
+            timeout=min(self.timeout_s, request.timeout_s) if request.timeout_s else self.timeout_s,
         )
         if self.api_base:
             kwargs["api_base"] = self.api_base
@@ -52,7 +52,7 @@ class LiteLLMBackend:
             text=resp.choices[0].message.content or "",
             model=model,
             backend=self.name,
-            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            prompt_tokens=getattr(usage, "prompt_tokens", None),
+            completion_tokens=getattr(usage, "completion_tokens", None),
             latency_ms=(time.perf_counter() - t0) * 1000,
         )

@@ -6,6 +6,7 @@ Ollama >= 0.5 accepts a JSON schema in `format`, which constrains decoding so
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -13,6 +14,14 @@ import urllib.request
 from typing import Any, Dict, List
 
 from ..types import LLMError, LLMRequest, LLMResponse
+
+
+def _count(v: Any) -> Any:
+    if type(v) is int and v >= 0:
+        return v
+    if type(v) is float and v >= 0 and v.is_integer():
+        return int(v)
+    return None
 
 
 class OllamaBackend:
@@ -24,7 +33,17 @@ class OllamaBackend:
         self.num_ctx = num_ctx
 
     # -- helpers -----------------------------------------------------------
-    def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _response_object(body: bytes) -> Dict[str, Any]:
+        try:
+            data = json.loads(body)
+        except ValueError as exc:
+            raise LLMError("Ollama returned invalid JSON") from exc
+        if not isinstance(data, dict):
+            raise LLMError("Ollama returned JSON that was not an object")
+        return data
+
+    def _post(self, path: str, body: Dict[str, Any], timeout_s: float | None = None) -> Dict[str, Any]:
         req = urllib.request.Request(
             self.host + path,
             data=json.dumps(body).encode("utf-8"),
@@ -32,21 +51,55 @@ class OllamaBackend:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+            with urllib.request.urlopen(req, timeout=timeout_s or self.timeout_s) as resp:
+                return self._response_object(resp.read())
         except urllib.error.HTTPError as e:
             raise LLMError(f"Ollama HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:300]}") from e
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
+        except (OSError, http.client.HTTPException) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
 
-    def list_models(self) -> List[str]:
-        req = urllib.request.Request(self.host + "/api/tags")
+    def _get(self, path: str) -> Dict[str, Any]:
+        req = urllib.request.Request(self.host + path)
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, OSError) as e:
+                return self._response_object(resp.read())
+        except (OSError, http.client.HTTPException) as e:
             raise LLMError(f"Ollama unreachable at {self.host}: {e}") from e
-        return [m["name"] for m in data.get("models", [])]
+
+    def version(self) -> str:
+        return str(self._get("/api/version").get("version", "unknown"))
+
+    def model_entries(self) -> List[Dict[str, Any]]:
+        """Pulled models with name, digest, size and details (quantization, family)."""
+        return self._models("/api/tags")
+
+    def list_models(self) -> List[str]:
+        return [m["name"] for m in self.model_entries()]
+
+    def running_models(self) -> List[Dict[str, Any]]:
+        """Models currently loaded in memory (size, size_vram)."""
+        return self._models("/api/ps")
+
+    def _models(self, path: str) -> List[Dict[str, Any]]:
+        models = self._get(path).get("models")
+        if not isinstance(models, list) or not all(
+            isinstance(model, dict) and isinstance(model.get("name"), str) for model in models
+        ):
+            raise LLMError(f"Ollama {path} response has an invalid model list")
+        return models
+
+    def trained_context_length(self, model: str) -> Any:
+        """The model's own maximum context length, or None if Ollama does not report it."""
+        try:
+            info = self._post("/api/show", {"model": model}).get("model_info", {}) or {}
+        except LLMError:
+            return None
+        if not isinstance(info, dict):
+            return None
+        for key, value in info.items():
+            if key.endswith(".context_length") and isinstance(value, int):
+                return value
+        return None
 
     # -- LLMBackend --------------------------------------------------------
     def complete(self, request: LLMRequest, model: str) -> LLMResponse:
@@ -67,15 +120,27 @@ class OllamaBackend:
             body["format"] = request.json_schema
 
         t0 = time.perf_counter()
-        data = self._post("/api/chat", body)
+        if request.timeout_s is None:
+            data = self._post("/api/chat", body)
+        else:
+            data = self._post("/api/chat", body, min(self.timeout_s, request.timeout_s))
         latency = (time.perf_counter() - t0) * 1000
         if "error" in data:
             raise LLMError(f"Ollama error: {data['error']}")
+        message = data.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+            raise LLMError("Ollama chat response is missing text content")
+        text = message["content"]
+        try:
+            text.encode("utf-8")
+        except UnicodeError as exc:
+            raise LLMError("Ollama chat response contains invalid Unicode") from exc
         return LLMResponse(
-            text=data.get("message", {}).get("content", ""),
+            text=text,
             model=model,
             backend=self.name,
-            prompt_tokens=int(data.get("prompt_eval_count", 0) or 0),
-            completion_tokens=int(data.get("eval_count", 0) or 0),
+            # Ollama omits these counts in some cases (e.g. a fully cached prompt): report unknown, not 0.
+            prompt_tokens=_count(data.get("prompt_eval_count")),
+            completion_tokens=_count(data.get("eval_count")),
             latency_ms=latency,
         )

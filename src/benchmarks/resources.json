@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "ollama_version": "0.40.16",
+    "ollama_archive_url": "https://github.com/ollama/ollama/releases/download/v0.40.16/ollama-linux-amd64.tar.zst",
+    "ollama_archive_sha256": "87bfafb2acbc89b2e6a1be0a9043de6aa75fb450696f86bc426e65fc448f788d",
+    "ollama_archive_bytes": 1545767640,
+    "model": "qwen2.5:7b-instruct-q4_K_M",
+    "model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "model_download_bytes": 4683086845,
+    "validation": "Official release/model metadata pinned; free-Colab execution pending."
+  },
+  "kramabench": {
+    "repo": "mitdbg/Kramabench",
+    "revision": "b2e0d77540263f8b6119f977fe79a8c4386b5a02",
+    "profile": "legal-csv-numeric-v1",
+    "domain": "legal",
+    "task_ids": [
+      "legal-easy-4",
+      "legal-easy-5",
+      "legal-easy-21"
+    ],
+    "workload": "workload/legal.json",
+    "assets": [
+      {
+        "path": "workload/legal.json",
+        "sha256": "e61a4cd6fec115c084b779813e50f566155dbb148a3e189ee77e37ad88608379",
+        "bytes": 330920
+      },
+      {
+        "path": "benchmark/metrics.py",
+        "sha256": "332502de61950c27a2273823851794db669dc885f656238a447178691457ce30",
+        "bytes": 20116
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv",
+        "sha256": "99027f597cd5610a9c156f668f555f69e8a9f6be95991998e3e21733449b7365",
+        "bytes": 1762
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv",
+        "sha256": "ddd02b40fd9e48919de785a3448dcf1f88908ea42a725ec8e2aae5f7d56e7501",
+        "bytes": 581
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Data_Contributors.csv",
+        "sha256": "fcdbbdfbfce463f4b34a2797c9ef398cade63cc8c814c110af2d96c3b8f84a16",
+        "bytes": 7278
+      }
+    ],
+    "metric": "success",
+    "coverage_note": "Three selected top-level numeric_exact tasks. No pipeline, subtask, hosted-judge or leaderboard aggregate evaluation."
+  },
+  "kramabench20": {
+    "benchmark_key": "kramabench20",
+    "grading_note": "Pinned local Success, RAE score and F1 metrics. Correct counts full credit. No official aggregate.",
+    "repo": "mitdbg/Kramabench",
+    "revision": "b2e0d77540263f8b6119f977fe79a8c4386b5a02",
+    "profile": "legal-csv-20-v1",
+    "domain": "legal",
+    "task_ids": [
+      "legal-easy-4",
+      "legal-easy-5",
+      "legal-easy-21",
+      "legal-easy-3",
+      "legal-hard-6",
+      "legal-hard-7",
+      "legal-hard-8",
+      "legal-easy-9",
+      "legal-easy-10",
+      "legal-easy-11",
+      "legal-easy-12",
+      "legal-easy-13",
+      "legal-hard-17",
+      "legal-hard-18",
+      "legal-easy-19",
+      "legal-easy-20",
+      "legal-hard-22",
+      "legal-easy-26",
+      "legal-easy-27",
+      "legal-hard-28"
+    ],
+    "answer_types": [
+      "numeric_exact",
+      "numeric_approximate",
+      "string_exact",
+      "list_exact"
+    ],
+    "strict_scope_task_ids": [
+      "legal-easy-4",
+      "legal-easy-5",
+      "legal-easy-21"
+    ],
+    "workload": "workload/legal.json",
+    "assets": [
+      {
+        "path": "benchmark/metrics.py",
+        "sha256": "332502de61950c27a2273823851794db669dc885f656238a447178691457ce30",
+        "bytes": 20116
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Data_Contributors.csv",
+        "sha256": "fcdbbdfbfce463f4b34a2797c9ef398cade63cc8c814c110af2d96c3b8f84a16",
+        "bytes": 7278
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Amount_Lost.csv",
+        "sha256": "efe8d073f152f6cfe6a39633931578739f622318196413f29d3eb70dc6706afc",
+        "bytes": 1085
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv",
+        "sha256": "ddd02b40fd9e48919de785a3448dcf1f88908ea42a725ec8e2aae5f7d56e7501",
+        "bytes": 581
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv",
+        "sha256": "d7339395ec0d3c71336961aab9f3c45361821c17e1208e6153b8d71f0bc6d309",
+        "bytes": 398
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv",
+        "sha256": "0408de480b457454f03c113c7640414d45236f93d57ddfe0d32872431906a43c",
+        "bytes": 2090
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv",
+        "sha256": "96916694364e84048d4d0db8e05ff8d803dd94c6192f740860ff90fd66078c1e",
+        "bytes": 28636
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv",
+        "sha256": "3c0131798df1b3473fb8b2577bb7b53c5b8fea9e36cf2882415c613d81d2691e",
+        "bytes": 1076
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv",
+        "sha256": "9bff1bf397a848d4c14cc4f8192b13d140e0ead40ce519389bf17541427af511",
+        "bytes": 1612
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv",
+        "sha256": "a726361b1eacd29bcad16b8e35cb96f618421832b3794b36587b4e233951e219",
+        "bytes": 662
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv",
+        "sha256": "e973331606af0be020f99777e90848a79d90f0cc709f98847ce1ebe1b0b1b3e8",
+        "bytes": 2039
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv",
+        "sha256": "930a7977512ab2fbd9d8a6cf13a353c7311d9a4f500908c6dfd7c44e52261646",
+        "bytes": 2161
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv",
+        "sha256": "99027f597cd5610a9c156f668f555f69e8a9f6be95991998e3e21733449b7365",
+        "bytes": 1762
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv",
+        "sha256": "7ea0cb2a0c3895d61e87e92b76b7b122753f7cfbce3ab3ba68fd5b2e5898a9e2",
+        "bytes": 22831
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv",
+        "sha256": "a2289b24172c8d4bc5c45dc8fb016777d1744ccb5cff1e5817316fac7c1c056e",
+        "bytes": 771
+      },
+      {
+        "path": "data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv",
+        "sha256": "8a98f9b10a5782f45a29f2f37e8cc592f91bfb713a419d2d2014bc0c03999e36",
+        "bytes": 1954
+      },
+      {
+        "path": "workload/legal.json",
+        "sha256": "e61a4cd6fec115c084b779813e50f566155dbb148a3e189ee77e37ad88608379",
+        "bytes": 330920
+      }
+    ],
+    "coverage_note": "Twenty top-level Legal tasks with concrete CSV references and local answer metrics. No pipeline, subtasks, hosted-judge metrics or official overall ranking."
+  },
+  "medagentbench": {
+    "repo": "stanfordmlgroup/MedAgentBench",
+    "revision": "99260117137b09f04837a8c18d18a1107efa55ae",
+    "available": false,
+    "reason": "Same-runtime official FHIR deployment and separately distributed refsol.py evaluator have not been verified on managed Colab. No substitute environment or text-only grading is enabled.",
+    "setup_url": "https://github.com/stanfordmlgroup/MedAgentBench#quick-start"
+  }
+}

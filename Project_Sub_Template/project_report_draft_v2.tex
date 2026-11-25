@@ -1,0 +1,137 @@
+% Draft. Replace bracketed fields and remove unused experiment placeholders before submission.
+% Maximum four A4 pages in two columns, including references.
+\documentclass[11pt,a4paper,twocolumn]{article}
+\usepackage[margin=2cm,columnsep=0.8cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,tabularx,amsmath}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\titleformat{\section}{\normalsize\bfseries}{\thesection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.3ex}{0.6ex}
+\setlength{\parskip}{0.3ex}
+\newcommand{\pending}{\textit{Pending}}
+
+\begin{document}
+\twocolumn[{%
+\begin{center}
+{\large\bfseries An Intelligible Blackboard Architecture for Evidence-Based Multi-Agent Reasoning}\\[0.7ex]
+Team [NUMBER]\\
+[MEMBER 1] ([ID]), [MEMBER 2] ([ID]), [MEMBER 3] ([ID]), [MEMBER 4] ([ID])\\[0.5ex]
+{\small CS F407 Artificial Intelligence, AY 2026--27 Semester I, BITS Pilani, K.K. Birla Goa Campus}\\[1ex]
+\begin{minipage}{0.88\textwidth}
+\small
+\centerline{\bfseries Abstract}\vspace{0.5ex}
+We investigate whether language-model agents can use a shared blackboard to gather evidence, review a claim, and agree on an answer to data analysis questions. Our prototype combines structured prediction and explanation exchanges, restricted CSV tools, and a controller that requires unanimous ratification. We evaluated the original runner on 20 selected KramaBench legal tasks with Qwen2.5-7B-Instruct on a Google Colab T4. Four tasks earned full credit and ten reached consensus. Ten tasks ended without a submission, and the run used 436,888 model tokens. The traces exposed two recurring problems: incomplete evidence collection and agreement on answers that the evidence did not support. We use those observations to improve CSV handling and agent review, and propose a paired experiment to measure the effect and token cost of evidence recovery.
+\end{minipage}
+\end{center}
+\vspace{0.8ex}
+}]
+
+\section{Introduction}
+Multi-agent systems can record votes without making it clear which data supports the answer. We use a shared blackboard to log tool queries, observations, claims, explanations, and votes. The input is a natural-language question and its allowed CSV files. The output is a typed answer, when submitted, and a trace that can be inspected in a browser. We evaluate whether the system obtains a correct answer and examine where that process breaks down.
+
+\section{Background and related work}
+PXP formalizes exchanges between agents that can provide predictions and explanations~\cite{pxp}. We adapt its tags for collaborative review on a shared board. Multi-agent debate also uses proposals and critiques to improve model reasoning~\cite{debate}. KramaBench evaluates agents on tasks drawn from data analysis pipelines~\cite{krama}. We use upstream task-level metrics for one selected subset of its legal workload.
+
+\section{Method}
+\paragraph{Board and tools.} A deterministic scheduler rotates three personas (analyst, critic, and reasoner) that share one local model. The opening agent must collect usable query evidence before proposing a claim. Agents can inspect, filter, sort, and aggregate the allowed CSVs and run bounded arithmetic. The controller validates structured actions and records the data returned by each tool. It keeps reference answers isolated from the agents.
+
+\paragraph{Review and recovery.} A \texttt{REVISE} action opens a claim or proposes a correction. \texttt{REFUTE} and \texttt{REJECT} record disagreements. Each agent must \texttt{RATIFY} the current claim after its latest revision for the session to reach consensus. With recovery enabled, an evidence failure, repeated disagreement, or deadlock can start one new investigation within the original task budget. The branch requires a changed evidence query and fresh ratifications before its answer replaces the main submission.
+
+\begin{figure}[ht]
+\centering
+\setlength{\fboxsep}{6pt}
+\fbox{\parbox{0.88\columnwidth}{\centering\small
+Question and allowed CSVs $\rightarrow$ Evidence queries\\[0.5ex]
+$\downarrow$\\[-0.2ex]
+Blackboard claim $\leftrightarrow$ Panel review and votes\\[0.5ex]
+$\downarrow$\\[-0.2ex]
+Saved trace and answer $\rightarrow$ Independent grade
+}}
+\caption{The runner records evidence and review on the shared board. The evaluator scores the submitted answer separately.}
+\end{figure}
+
+\paragraph{Changes after the baseline.} Trace review led to fixes for multi-table CSVs and misleading headers, clearer grouped-query errors, and support for deriving growth rates and proportions. The updated runner retains usable evidence when recovery follows failed collection and points agents to files they have yet to query successfully. Review prompts direct agents to check dates, filters, units, arithmetic, and whether results were cut off.
+
+\section{Experimental setup}
+We selected 20 fixed legal CSV tasks through the \texttt{kramabench20} profile. The original run used Qwen2.5-7B-Instruct (\texttt{q4\_K\_M}) through Ollama 0.40.16 on a Google Colab T4 GPU with seed 0 and temperature 0.3. The original source revision was \texttt{4fea88e}; the evaluator revision was \texttt{b2e0d775}. [Add updated run ID, source hash, and manifest settings after the rerun.]
+
+Our primary outcome is the number of full-credit answers divided by the number of selected tasks. We also report partial credit, unanimous consensus, and tasks with no submission. The pinned local evaluator selects Success, relative absolute error score, or F1 according to the answer type. The sample covers a subset of the legal workload.
+
+\section{Results}
+\begin{table}[ht]
+\centering\small
+\input{baseline_analysis.tex}
+\caption{Original 20-task run. Each task contributes its latest outcome to the upper panel. The lower panel counts model calls and tokens across all attempts.}
+\label{tab:live}
+\end{table}
+
+Table~\ref{tab:live} was generated from the saved task outcomes and model call logs. Four of the 20 selected tasks earned full credit (20\%). Of the ten consensus answers, five earned zero credit and one earned partial credit. Eight tasks ended after repeated tool requests failed to produce usable evidence. Two more exhausted their evidence tool budget. Eleven tasks entered recovery following evidence failures. One recovery reached consensus and submitted an answer that scored zero. No task triggered the deadlock detector. [Updated runner: insert full-credit, consensus, and no-submission counts once all selected tasks finish.]
+
+\paragraph{Failure example.} Task \texttt{legal-easy-9} asked for the year with the greatest relative increase compared with the previous year. The analyst sorted raw counts over eight years. The tool warned that the date range was incomplete. The panel still ratified the answer, which scored zero. This case motivates checking the calculation as well as the source rows during review.
+
+\paragraph{Token accounting.} The original run recorded 404,537 prompt tokens and 32,351 completion tokens across 219 calls, approximately 21,844 tokens per selected task. Recovery accounted for 72 calls and 170,369 tokens (39.0\% of the run total), based on the phase field in the saved call logs. These figures include failed tasks. They describe where the original run spent tokens. An estimate of the extra cost of enabling recovery requires a matched run with recovery disabled.
+
+\section{Planned recovery ablation}
+The experiment changes one setting on the updated runner: whether it can start a recovery branch. Run the same tasks once in each condition with the same model digest, seed, sampling settings, budget, and T4 configuration. The full 20-task selection is preferred. For a smaller exploratory run, fix the task IDs before comparing results and state how they were chosen. Report outcomes for all paired tasks, including those without submissions.
+
+\begin{table}[ht]
+\centering\small
+\begin{tabularx}{\columnwidth}{@{}Xcc@{}}
+\toprule
+Matched subset & Recovery off & Recovery on \\
+\midrule
+Paired tasks & [N] & [N] \\
+Full-credit answers & \pending & \pending \\
+Consensus & \pending & \pending \\
+No submission & \pending & \pending \\
+Recovery starts / confirmations & 0 / 0 & \pending \\
+Mean tokens per task & \pending & \pending \\
+Mean model calls per task & \pending & \pending \\
+\bottomrule
+\end{tabularx}
+\caption{Planned paired experiment. Run both conditions with the same updated code.}
+\end{table}
+
+Count tasks that gain or lose full credit with recovery, and report the mean within-task difference in tokens (on minus off). Use the backend's prompt and completion counts, including repair and recovery calls. Report token coverage and mark unavailable counts as missing. If recovery never starts on the selected tasks, the sample cannot tell us how recovery affects failed investigations.
+
+\section{Discussion and limitations}
+The experiment covers selected legal CSV tasks. The original and updated runs also differ in tools and prompts, so their comparison measures the combined changes. The paired experiment isolates the recovery switch. The original batch contained no detected deadlocks, so it provides evidence about recovery from insufficient evidence only. The proposed four-density counterfactual-agent study and formal PXP intelligibility classifications remain unmeasured. MSCoRe has a separate simulation path. The official MedAgentBench environment was unvalidated in our Colab setup.
+
+\section{Conclusion}
+The prototype provides an inspectable path from a question to a graded answer. In the original batch, evidence collection blocked half the selected tasks and unanimous agreement sometimes accompanied a wrong answer. The updated run and paired recovery experiment will measure whether the changes improve submission and full-credit rates, and what they cost in model calls and tokens.
+
+\section*{Individual member contributions}
+{\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Name & Contribution \\
+\midrule
+[MEMBER 1] & [Verified contribution] \\
+[MEMBER 2] & [Verified contribution] \\
+[MEMBER 3] & [Verified contribution] \\
+[MEMBER 4] & [Verified contribution] \\
+\bottomrule
+\end{tabularx}}
+
+\section*{Generative AI disclosure}
+Codex assisted with code changes, analysis of run records, and report drafting. [Add other tools and versions used.] [Confirm author review and responsibility before submitting.]
+
+\section*{Code availability}
+\url{https://github.com/nikhil0744/intelligible-blackboard-architecture}.
+See the Colab benchmark guide in the repository. The original run is \texttt{20261124-163117-95da1a83}. Record the final source hash, task selection, and matching run manifests with the results.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{pxp} A. Srinivasan, M. Bain, A. Baskar, and E. Coiera.
+A protocol for intelligible interaction between agents that learn and explain.
+arXiv:2301.01819, 2023.
+\bibitem{debate} Y. Du et al.
+Improving factuality and reasoning in language models through multiagent debate.
+arXiv:2305.14325, 2023.
+\bibitem{krama} E. Lai et al.
+KramaBench: A benchmark for AI systems on data-to-insight pipelines over data lakes.
+ICLR, 2026.
+\end{thebibliography}
+\end{document}
